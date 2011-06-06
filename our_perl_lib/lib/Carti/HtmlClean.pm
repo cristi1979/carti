@@ -10,6 +10,8 @@ $Data::Dumper::Sortkeys = 1;
 use HTML::TreeBuilder::XPath;
 use HTML::TreeBuilder;
 # use XML::LibXML;
+use Cwd 'abs_path';
+use File::Basename;
 use Encode;
 
 sub get_tree {
@@ -139,6 +141,156 @@ $css_txt = `csstidy "$work_dir/css_file.css" --silent=true --discard_invalid_pro
     return $tree;
 }
 
+sub doc_tree_clean_center {
+    my $tree = shift;
+    foreach my $a_tag ($tree->guts->look_down(_tag => "center")) {
+	### no tables in center?
+	my $tmp = 0;
+	foreach my $b_tag ($a_tag->descendants()){
+	    if ($b_tag->tag eq "center") {
+		$a_tag->replace_with_content;
+		$tmp++;
+		last;
+	    }
+	}
+	next if $tmp;
+	### no center in center
+	foreach my $b_tag ($a_tag->lineage()){
+	    if ($b_tag->tag eq "center") {
+		$a_tag->replace_with_content;
+		last;
+	    }
+	}
+# 	return 0  if (! ref $a_tag || (ref $a_tag && $a_tag->tag ne "br") );
+    }
+    return $tree;
+}
+
+sub doc_tree_clean_tables_attributes {
+    my $a_tag = shift;
+    ### clean table attributes
+    foreach my $attr_name ($a_tag->all_external_attr_names){
+	my $attr_value = $a_tag->attr($attr_name);
+	if ( $attr_name eq "border"
+		|| $attr_name eq "bordercolor"
+		|| $attr_name eq "cellspacing"
+		|| $attr_name eq "frame"
+		|| $attr_name eq "rules"
+		|| $attr_name eq "dir"
+		|| $attr_name eq "bgcolor"
+		|| $attr_name eq "align"
+		|| $attr_name eq "style"
+		|| $attr_name eq "cols"
+# 			&& ( $attr_value =~ "page-break-(before|after|inside)")
+		|| $attr_name eq "hspace"
+		|| $attr_name eq "vspace"){
+	    $a_tag->attr("$attr_name", undef);
+	} elsif ($attr_name eq "cellpadding"
+		|| $attr_name eq "width") {
+	} else {
+	    die "Unknown attr in table: $attr_name = $attr_value.\n";
+	    return undef;
+	}
+    }
+}
+
+sub doc_tree_is_empty_p {
+    my $tag = shift;
+    foreach my $a_tag ($tag->content_list) {
+	return 0  if (! ref $a_tag || (ref $a_tag && $a_tag->tag ne "br") );
+    }
+    return 1;
+}
+
+sub doc_tree_clean_tables {
+    my $tree = shift;
+
+    foreach my $a_tag ($tree->guts->look_down(_tag => "table")) {
+	### replace all headings with bold
+	foreach my $b_tag ($a_tag->descendants()) {
+	    if ($b_tag->tag =~ m/^h[0-9]{1,2}$/) {
+		$b_tag->tag('b');
+	    }
+	}
+	$a_tag->postinsert(['br']);
+	$a_tag->preinsert(['br']);
+	doc_tree_clean_tables_attributes($a_tag);
+	### replace thead and tbody with content
+	foreach my $b_tag ($a_tag->content_list){
+	    if (ref $b_tag){
+		my $tag = $b_tag->tag;
+		if ( $tag eq "thead" || $tag eq "tbody"){
+		    $b_tag->replace_with_content;
+		}
+	    }
+	}
+
+	### expect only col and tr
+	foreach my $b_tag ($a_tag->content_list){
+	    die "not reference in table\n" if ! ref $b_tag;
+	    my $tag = $b_tag->tag;
+	    if ( $tag eq "col" || $tag eq "colgroup"){
+		$b_tag->detach;
+	    } elsif ( $tag eq "tr" ){
+		### clean tr attributes
+		foreach my $attr_name ($b_tag->all_external_attr_names){
+		    my $attr_value = $b_tag->attr($attr_name);
+		    if ( $attr_name eq "valign"){
+			$a_tag->attr("$attr_name", undef);
+		    } elsif ( $attr_name eq "bgcolor") {
+		    } else {
+			die "Unknown attr in tr: $attr_name = $attr_value.\n";
+			return undef;
+		    }
+		}
+		### expect only td in tr
+		my $has_content = 0;
+		foreach my $c_tag ($b_tag->content_list){
+		    die "not reference in tr\n" if ! ref $c_tag;
+		    my $tag = $c_tag->tag;
+		    die "Unknown tag: $tag\n" if $tag ne "td" && $tag ne "th";
+		    ### clean td attributes
+		    foreach my $attr_name ($c_tag->all_external_attr_names){
+			my $attr_value = $c_tag->attr($attr_name);
+			if ( $attr_name eq "align"
+				|| $attr_name eq "style"
+				|| $attr_name eq "sdnum"
+				|| $attr_name eq "sdval"
+				|| $attr_name eq "valign"){
+			    $c_tag->attr("$attr_name", undef);
+			} elsif ($attr_name eq "bgcolor" || $attr_name eq "colspan" || $attr_name eq "rowspan" 
+				|| $attr_name eq "width"
+				|| $attr_name eq "height") {
+			} else {
+			    die "Unknown attr in $tag: $attr_name = $attr_value.\n";
+			}
+		    }
+		    ### remove empty td, add new lines
+		    foreach my $d_tag ($c_tag->content_refs_list){
+			if ( ref $$d_tag && ( $$d_tag->tag eq "p" || $$d_tag->tag eq "br") ) {
+			    $$d_tag->postinsert(['br']) if $$d_tag->tag ne "br";
+			    $has_content++ if $$d_tag->tag eq "p" && ! doc_tree_is_empty_p($$d_tag);
+			} elsif ( ref $$d_tag ) {
+			    $has_content++;
+			} else {
+			    $$d_tag =~ s/$/\n/gm;
+			}
+		    }
+		    next if $has_content;
+		    my $txt = $c_tag->as_text();
+		    $txt =~ s/\s*//gs;
+		    $has_content++ if ( $txt ne '');
+		}
+		$b_tag->detach if ( ! $has_content );
+	    } else {
+		die "Unknown tag in table: $tag.\n";
+		return undef;
+	    }
+	}
+    }
+    return $tree;
+}
+
 sub wiki_tree_clean_wiki {
     my $tree = shift;
     my @to_delete = ();
@@ -236,9 +388,11 @@ sub doc_tree_fix_links {
 	my($link, $element, $attr, $tag) = @$_;
 	if ($tag eq "img" || $tag eq "body") {
 	    my $name_ext = uri_unescape( $link );
-	    my ($name, $ext) = ($1, $3) if $name_ext =~ m/^(.*)(\.)(.*?)$/i;
+	    $name_ext =~ s/^\.\.\///;
+	    my ($name,$dir,$ext) = fileparse($name_ext, qr/\.[^.]*/);
+# 	    my ($name, $ext) = ($1, $2) if $name_ext =~ m/^(.*)(\..*?)$/i;
 	    my $new_name = $name."_conv.jpg";
-	    $images->{"$name_ext"} = "$new_name";
+	    $images->{"$name$ext"} = "$new_name";
 	    $element->attr($attr, uri_escape $new_name);
 	} elsif ($tag eq "a") {
 	    my $is_footnote = 0;
@@ -264,15 +418,35 @@ sub doc_tree_fix_links {
     foreach my $nr (sort keys %$ref_hash) {
 	die "Strange ref nr $nr.\n" if !defined $ref_hash->{$nr}->{'h_anc'} || !defined $ref_hash->{$nr}->{'h_sym'};
 	my $txt;
-	$txt = ($ref_hash->{$nr}->{'h_anc'}->look_up("_tag", "p"))[0];
-	$txt = ($ref_hash->{$nr}->{'h_anc'}->look_up("_tag", "h6"))[0] if ! defined $txt;
-	$txt->detach;
-	$txt = $txt->as_text;
-	$txt =~ s/^\s*([0-9]+|\x{e2}\x{86}\x{91}|\x{5e})\s+//;
+	$txt = ($ref_hash->{$nr}->{'h_anc'}->look_up("_tag", 'p'))[0];
+	if (! defined $txt) {
+	    $txt = ($ref_hash->{$nr}->{'h_anc'}->look_up("_tag", 'h6'))[0];
+	    $txt->tag('p');
+	}
 	my $a_ref = HTML::Element->new('ref');
-	$a_ref->push_content($txt);
-	$ref_hash->{$nr}->{'h_sym'}->replace_with( $a_ref );
+	my $have_text = 0;
+	if ($txt->parent->tag eq "div" && defined $txt->parent->attr('id') && $txt->parent->attr('id') =~ m/^sdfootnote/) {
+	    $txt = $txt->parent;
+	    foreach my $a_tag ($txt->look_down(_tag => 'p')) {
+		my $tmp = $a_tag->as_text;
+		$a_tag->detach;
+		$tmp =~ s/^\s*([0-9]+|\x{e2}\x{86}\x{91}|\x{5e})\s+//;
+		next if $tmp =~ m/^\s+$/gsm;
+		$a_ref->push_content($tmp, ['br_io']);
+		$have_text++;
+	    }
+	} else {
+	    die "still fixing notes.\n";
+	}
+# 	$txt->detach;
+# 	$txt = $txt->as_text;
+# 	$txt =~ s/^\s*([0-9]+|\x{e2}\x{86}\x{91}|\x{5e})\s+//;
+# 	my $a_ref = HTML::Element->new('ref');
+# 	$a_ref->push_content($txt);
+	die "reference empty.\n" if ! $have_text;
+	$ref_hash->{$nr}->{'h_sym'}->replace_with( $a_ref ) if $have_text;
     }
+
     return ($tree, $images);
 }
 
@@ -309,22 +483,26 @@ sub doc_tree_clean_h {
     print "\tClean headings.\n";
     foreach my $a_tag ($tree->descendants()) {
 	next if $a_tag->tag !~ m/^h[0-9]{1,2}$/;
-	my $tmp = 0;
+	my $tmp = 1;
 	## stuff still there after first run
-	while ($tmp < 2){
+	while ($tmp){
+	    $tmp = 0;
+	    foreach my $b_tag ($a_tag->descendants()) {
+		if ($b_tag->tag eq "a" ||
+			$b_tag->tag eq "b" ||
+			$b_tag->tag eq "strong" ||
+			$b_tag->tag eq "i" ||
+			$b_tag->tag eq "em" ||
+			$b_tag->tag eq "u" ||
+			$b_tag->tag eq "center" ||
+			$b_tag->tag eq "font" ||
+			$b_tag->tag eq "span" )  {
+		    $b_tag->replace_with_content;
+		}
+	    }
 	    foreach my $content_tag ($a_tag->content_refs_list) {
 		if (ref $$content_tag) {
-		    if ($$content_tag->tag eq "a" ||
-			$$content_tag->tag eq "b" ||
-			$$content_tag->tag eq "strong" ||
-			$$content_tag->tag eq "i" ||
-			$$content_tag->tag eq "em" ||
-			$$content_tag->tag eq "u" ||
-			$$content_tag->tag eq "center" ||
-			$$content_tag->tag eq "font" ||
-			$$content_tag->tag eq "span" )  {
-			$$content_tag->replace_with_content;
-		    } elsif ($$content_tag->tag eq "img") {
+		    if ($$content_tag->tag eq "img") {
 			my $img = $$content_tag->clone;
 			$$content_tag->detach;
 			my $p = HTML::Element->new('p');
@@ -345,7 +523,6 @@ sub doc_tree_clean_h {
 # 		    die "$$content_tag\n";
 		}
 	    }
-	    $tmp++;
 	}
     }
     return $tree;
@@ -564,20 +741,20 @@ sub html_tidy {
     my $html = shift;
     print "\tTidy up.\n";
     my $tidy = HTML::Tidy->new({ indent => "auto", tidy_mark => 0, doctype => 'omit',
-	char_encoding => "raw", clean => 'yes', preserve_entities => 0, new_inline_tags => 'ref'});
+	char_encoding => "raw", clean => 'yes', preserve_entities => 0, new_inline_tags => 'ref', new_inline_tags => 'br_io'});
     $html = $tidy->clean($html);
     return $html;
 }
 
-sub doc_tree_clean_tables {
-    my $tree = shift;
-    print "\tClean tables.\n";
-    foreach my $a_tag ($tree->guts->look_down(_tag => "td")) {
-	foreach my $attr_name ($a_tag->all_external_attr_names) {
-	    $a_tag->attr("$attr_name", undef) if $attr_name eq "style";
-	}
-    }
-    return $tree;
-}
+# sub doc_tree_clean_tables {
+#     my $tree = shift;
+#     print "\tClean tables.\n";
+#     foreach my $a_tag ($tree->guts->look_down(_tag => "td")) {
+# 	foreach my $attr_name ($a_tag->all_external_attr_names) {
+# 	    $a_tag->attr("$attr_name", undef) if $attr_name eq "style";
+# 	}
+#     }
+#     return $tree;
+# }
 
 return 1;

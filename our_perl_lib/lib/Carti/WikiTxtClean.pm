@@ -67,6 +67,7 @@ sub wiki_fix_chars {
     $wiki =~ s/\x{EF}\x{81}\x{2014}/\x{e2}\x{9c}\x{98}/gsi;
     ## some strange spaces
     $wiki =~ s/\x{c2}\x{a0}/ /gsi;
+
     return $wiki;
 }
 
@@ -115,6 +116,11 @@ sub wiki_fix_small_issues {
     $wiki =~ s/\|}\s*{\|/\|}\n\n\n{\|/mg;
     $wiki =~ s/^[:\s]*$//gm;
     $wiki =~ s/\-\-\-\-\n+=Note de subsol=\n*//m;
+    ## me
+    $wiki =~ s/<br_io><\/br_io>/<br \\>/gm;
+    $wiki =~ s/(<br \\>)+/<br \\>/mg;
+    $wiki =~ s/<br \\><\/ref>/<\/ref>/mg;
+    
     return $wiki;
 }
 

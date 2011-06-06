@@ -154,6 +154,7 @@ sub rules {
     ins        => { preserve => 1, attributes => [ @common_attrs, qw/ cite datetime / ] },
     font       => { preserve => 1, attributes => [ @common_attrs, qw/ color / ] },
     ref        => { preserve => 1, attributes => \@block_attrs  },
+    br_io        => { preserve => 1, attributes => \@block_attrs  },
 
     # Headings (h1-h6)
     h1 => { start => \&_hr_start, end => \&_hr_end, block => 1, trim => 'both', line_format => 'single' },

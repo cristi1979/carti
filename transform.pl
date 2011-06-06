@@ -27,7 +27,10 @@ use Carti::HtmlClean;
 use Carti::Common;
 use Carti::WikiTxtClean;
 
-my $wiki_site = "http://10.11.4.45/wiki";
+# my $wiki_site = "http://10.11.4.45/wiki";
+# my $wiki_site = "http://localhost:2900/wiki";
+my $wiki_site = "http://192.168.0.102/wiki";
+
 my $docs_prefix = shift;
 # $docs_prefix = "/mnt/home/cristi/programe/scripts/carti/code/books";
 $docs_prefix = abs_path($docs_prefix);
@@ -41,19 +44,30 @@ my $crt = 0;
 
 sub generate_html_file {
     my $doc_file = shift;
+    my ($name,$dir,$suffix) = fileparse($doc_file, qr/\.[^.]*/);
     print "\t-Generating html file from $doc_file.\n";
     eval {
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 46800; # 13 hours
-	system("python", "$script_dir/unoconv", "-f", "html", "$doc_file");
+	system("python", "$script_dir/unoconv", "-f", "html", "$doc_file") == 0 or die "unoconv failed: $?";
 	alarm 0;
     };
-    if ($? == -1) {
-	die "failed to execute: $!\n";
-    }
-    elsif ($? & 127) {
-	printf "child died with signal %d, %s coredump\n", ($? & 127), ($? & 128) ? 'with' : 'without';
-	die;
+    my $status = $@;
+    if ($status) {
+	print "Error: Timed out: $status.\n";
+	eval {
+	    local $SIG{ALRM} = sub { die "alarm\n" };
+	    alarm 46800; # 13 hours
+	    system("Xvfb :10235 -screen 0 1024x768x16 &> /dev/null &");
+	    system("libreoffice", "-display", ":10235", "-unnaccept=all", "-invisible", "-nocrashreport", "-nodefault", "-nologo", "-nofirststartwizard", "-norestore", "-convert-to", "html:HTML (StarWriter)", "-outdir", "$dir", "$doc_file") == 0 or die "libreoffice failed: $?";
+	    alarm 0;
+	};
+	$status = $@;
+	if ($status) {
+	    print "Error: Timed out: $status.\n";
+	} else {
+	    print "\tFinished: $status.\n";
+	}
     }
     print "\t+Generating html file from $doc_file.\n";
     return 0;
@@ -89,6 +103,9 @@ sub import_wiki {
 #     $no_links = 0 if $book eq "dudu -- Fracurile Negre III - 01 Manusa de otel";
     my $i = 1;
     my $html = Common::read_file("$html_file");
+    ## this should be minus?
+    $html =~ s/\x{1e}/-/gsi;
+    $html =~ s/\x{2}//gsi;
     ### clean_html_from_doc
     my $tree = HtmlClean::get_tree($html);
     $tree = HtmlClean::doc_tree_remove_TOC($tree);
@@ -100,11 +117,12 @@ sub import_wiki {
     $tree = HtmlClean::doc_tree_clean_span($tree);
     $tree = HtmlClean::doc_tree_remove_empty_span($tree);
     $tree = HtmlClean::doc_tree_clean_h($tree);
-    $tree = HtmlClean::doc_tree_clean_tables($tree);
     $tree = HtmlClean::doc_tree_clean_div($tree);
     $tree = HtmlClean::doc_tree_clean_b_i($tree);
-    $tree = HtmlClean::doc_tree_fix_paragraph_center($tree);
     $tree = HtmlClean::doc_tree_remove_empty_list($tree);
+    $tree = HtmlClean::doc_tree_clean_tables($tree);
+    $tree = HtmlClean::doc_tree_fix_paragraph_center($tree);
+    $tree = HtmlClean::doc_tree_clean_center($tree);
     $html = $tree->as_HTML('<>&', "\t");
 #     Common::write_file("$work_dir/$book cleaned.html", HtmlClean::html_tidy($html));
     my $orig_images = $image_files;
@@ -112,9 +130,13 @@ sub import_wiki {
     foreach (sort keys %$orig_images) {
 	my $orig_name = $_;
 	my $new_name = $orig_images->{$_};
-	print "Missing image $orig_name.\n",next if ! -f "$work_dir/$orig_name";
+	if (! -f "$work_dir/$orig_name") {
+	    print "Missing image $work_dir/$orig_name.\n";
+	    next;
+	}
 	print "\tConverting file $orig_name to $new_name.\n";
-	`convert "$work_dir/$orig_name" -background white -flatten "$work_dir/$new_name"`;
+	system("convert", "$work_dir/$orig_name", "-background", "white", "-flatten", "$work_dir/$new_name") == 0 or die "error runnig convert: $!.\n";
+
 	push @$image_files, "$work_dir/$new_name";
 	unlink "$work_dir/$orig_name";
     }
@@ -141,7 +163,7 @@ sub import_wiki {
     unlink "$_" foreach (@$image_files), "align", "right";
     $our_wiki->wiki_delete_page("$book") if $our_wiki->wiki_exists_page("$book");
     $our_wiki->wiki_edit_page("$book", $wiki);
-# exit 1;
+exit 1;
     unlink $html_file;
     unlink $wiki_file;
 }
@@ -174,6 +196,7 @@ sub work_docs {
     foreach my $book (sort keys %$books) {
 	my $file = $books->{$book};
 	my ($name,$dir,$ext) = fileparse($file, qr/\.[^.]*/);
+next if $file !~ m/Cavalerii teutoni/i;
 	print "\n". '-'x10 ."\t".$crt++." out of $total\n$book\n";
 	$book = "$author -- $book" if $author !~ m/^\s*$/;
 	### import doc to wiki
@@ -189,7 +212,7 @@ next if -d "$script_dir/$work_prefix/$book";
 	import_wiki($book);
 	unlink "$working_file" || die "Can't remove file $file:$!.\n";
 	rmdir "$work_dir" || print "Can't remove dir $work_dir:$!.\n";
-# exit 1;
+exit 1;
     }
 }
 
@@ -229,6 +252,6 @@ foreach my $type (keys %$files_to_import) {
     } elsif ($type =~ m/\.epub$/i) {
     } elsif ($type =~ m/\.zip$/i) {
     } else {
-	die Dumper($files_to_import->{$type})."\nUnknown file type: $type.\n";
+	print Dumper($files_to_import->{$type})."\nUnknown file type: $type.\n";
     }
 }
