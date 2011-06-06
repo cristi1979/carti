@@ -1,0 +1,25 @@
+drop database wikidb;
+create database wikidb CHARACTER SET binary COLLATE binary;
+
+grant drop,index, create, select, insert, update, delete, alter, lock tables on wikidb.* to 'wikiuser'@'localhost' identified by '!0wikiuser@9';
+grant super on *.* to  'wikiuser'@'localhost';
+SHOW CREATE TABLE text;
+
+
+linux root pass
+linux wiki pass
+mysql root pass
+mysql wikiuser pass
+wiki admin pass
+ssmtp email
+
+
+yum install libreoffice-writer libreoffice-headless libreoffice-pyuno php mysql mysql-server openssh-clients php-pecl-apc php-intl php-mysql zip iotop lsof lynx mc php-gd svn wget ssmtp
+
+disable selinux:
+echo 0 >/selinux/enforce
+edit /etc/selinux/config 
+
+server:
+yum install perl-XML-LibXML csstidy tidy perl-HTML-Tidy ImageMagick
+
