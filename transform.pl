@@ -152,31 +152,29 @@ sub make_wiki {
 
     my $wiki = $wc->html2wiki(Encode::encode('utf8', $html));
 # Common::write_file("$work_dir/$book 1.wiki", Encode::decode('utf8', $wiki));
+    unlink $html_file;
     return ($wiki, $image_files);
 }
 
 sub import_wiki {
-    my ($wiki, $title, $image_files, $work_dir) = @_;
+    my ($wiki, $title, $image_files, $work_dir, $author) = @_;
+    $our_wiki = new WikiWork("$wiki_site", 'admin', 'qazwsx');
     $wiki = WikiTxtClean::wiki_fix_chars($wiki);
 # Common::write_file("$work_dir/$title 2.wiki", Encode::decode('utf8', $wiki));
     $wiki = WikiTxtClean::wiki_fix_empty_center($wiki);
-# Common::write_file("$work_dir/$title 3.wiki", Encode::decode('utf8', $wiki));
     $wiki = WikiTxtClean::wiki_fix_small_issues($wiki);
-# Common::write_file("$work_dir/$title 4.wiki", Encode::decode('utf8', $wiki));
 #     $wiki = WikiTxtClean::wiki_guess_headings($wiki);
     $wiki .= "\n\n----\n=Note de subsol=\n\n<references />\n\n";
-#     my $wiki_file = "$work_dir/$url.wiki";
-# Common::write_file("$work_dir/$title 5.wiki", Encode::decode('utf8',$wiki));
+    foreach my $tmp (split "&", $author) {
+	$tmp =~s/(^\s+|\s+$)//g;
+	$wiki .= "[[Category:$tmp]]\n";
+	$our_wiki->wiki_edit_page("Category:$tmp", "----") if ! $our_wiki->wiki_exists_page("Category:$tmp");
+    }
     ### wikitext_to_wikiweb
-    $our_wiki = new WikiWork("$wiki_site", 'admin', 'qazwsx');
     $our_wiki->wiki_upload_file($image_files);
     unlink "$_" foreach (@$image_files); #, "align", "right"
-#     my $title = Encode::decode('utf8', $book);
     $our_wiki->wiki_delete_page("$title") if $our_wiki->wiki_exists_page("$title");
     $our_wiki->wiki_edit_page("$title", $wiki);
-# exit 1;
-#     unlink $html_file;
-#     unlink $wiki_file;
 }
 
 # sub wikiweb_to_html {
@@ -207,8 +205,7 @@ sub work_docs {
     die "no author.\n" if $author =~ m/^\s*$/;
     foreach my $book (sort keys %$books) {
 	my $file = $books->{$book};
-print "$file\n";
-next if $file !~ m/Un comando pe dou/i;
+# next if $file !~ m/Un comando pe dou\x{c4}\x{83} continente/i;
 	print "\n". '-'x10 ."\t".$crt++." out of $total\n$book\n";
 	my $title = "$author -- $book";
 	$book = "$author -- $book";
@@ -223,7 +220,7 @@ next if -d "$work_dir";
 	my $res = generate_html_file("$working_file");
 	if ($res || ! -s "$work_dir/$name.html") {print "Can't generate html.\n";next;}
 	my ($wiki_text, $image_files) = make_wiki("$work_dir/$name.html", $work_dir);
-	import_wiki($wiki_text, $title, $image_files, $work_dir);
+	import_wiki($wiki_text, $title, $image_files, $work_dir, $author);
 	unlink "$working_file" || die "Can't remove file $file:$!.\n";
 # 	rmdir "$work_dir" || print "Can't remove dir $work_dir:$!.\n";
 # exit 1;
@@ -265,6 +262,7 @@ foreach my $type (keys %$files_to_import) {
     } elsif ($type =~ m/\.pdf$/i) {
     } elsif ($type =~ m/\.epub$/i) {
     } elsif ($type =~ m/\.zip$/i) {
+    } elsif ($type =~ m/\.js$/i) {
     } else {
 	print Dumper($files_to_import->{$type})."\nUnknown file type: $type.\n";
     }
