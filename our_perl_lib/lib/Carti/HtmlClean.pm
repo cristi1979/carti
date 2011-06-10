@@ -115,12 +115,12 @@ sub wiki_tree_clean_css {
     $css_txt .= "p,table {line-height: 2em; font-size: .9em; margin: .5em;text-indent: 2.0em;text-align:justify;}";
     $css_txt .= "li,table.wikitable {margin: .5em;}";
     $css_txt .= "h1,h2,h3,h4,h5,h6,h7,h8 {text-align:center;}";
-$css_txt =~ s/\@media only screen and \(max-device-width:[0-9]+px\){body{-webkit-text-size-adjust:none}}//gm;
-$css_txt =~ s/\@media handheld\s*\{//gm;
-$css_txt =~ s/\@media screen,handheld{//gm;
-$css_txt =~ s/}}//gm;
+    $css_txt =~ s/\@media only screen and \(max-device-width:[0-9]+px\){body{-webkit-text-size-adjust:none}}//gm;
+    $css_txt =~ s/\@media handheld\s*\{//gm;
+    $css_txt =~ s/\@media screen,handheld{//gm;
+    $css_txt =~ s/}}//gm;
     Common::write_file("$work_dir/css_file.css", $css_txt);
-$css_txt = `csstidy "$work_dir/css_file.css" --silent=true --discard_invalid_properties=true --merge_selectors=1`;
+    $css_txt = `csstidy "$work_dir/css_file.css" --silent=true --discard_invalid_properties=true --merge_selectors=1`;
     Common::write_file("$work_dir/css_file.css", $css_txt);
     my ($css, @no_display) = css_clean("$work_dir/css_file.css");
 # print Dumper($css->write_string);
@@ -141,31 +141,6 @@ $css_txt = `csstidy "$work_dir/css_file.css" --silent=true --discard_invalid_pro
     return $tree;
 }
 
-sub doc_tree_clean_center {
-    my $tree = shift;
-    foreach my $a_tag ($tree->guts->look_down(_tag => "center")) {
-	### no tables in center?
-	my $tmp = 0;
-	foreach my $b_tag ($a_tag->descendants()){
-	    if ($b_tag->tag eq "center") {
-		$a_tag->replace_with_content;
-		$tmp++;
-		last;
-	    }
-	}
-	next if $tmp;
-	### no center in center
-	foreach my $b_tag ($a_tag->lineage()){
-	    if ($b_tag->tag eq "center") {
-		$a_tag->replace_with_content;
-		last;
-	    }
-	}
-# 	return 0  if (! ref $a_tag || (ref $a_tag && $a_tag->tag ne "br") );
-    }
-    return $tree;
-}
-
 sub doc_tree_clean_tables_attributes {
     my $a_tag = shift;
     ### clean table attributes
@@ -177,7 +152,7 @@ sub doc_tree_clean_tables_attributes {
 		|| $attr_name eq "frame"
 		|| $attr_name eq "rules"
 		|| $attr_name eq "dir"
-		|| $attr_name eq "bgcolor"
+# 		|| $attr_name eq "bgcolor"
 		|| $attr_name eq "align"
 		|| $attr_name eq "style"
 		|| $attr_name eq "cols"
@@ -387,11 +362,13 @@ sub doc_tree_fix_links {
     foreach (@{  $tree->extract_links()  }) {
 	my($link, $element, $attr, $tag) = @$_;
 	if ($tag eq "img" || $tag eq "body") {
-	    my $name_ext = uri_unescape( $link );
+	    my $name_ext = Common::normalize_text(uri_unescape($link));
+# 	    my $name_ext = uri_unescape( $link );
 	    $name_ext =~ s/^\.\.\///;
 	    my ($name,$dir,$ext) = fileparse($name_ext, qr/\.[^.]*/);
 # 	    my ($name, $ext) = ($1, $2) if $name_ext =~ m/^(.*)(\..*?)$/i;
 	    my $new_name = $name."_conv.jpg";
+# print Dumper($link, $attr, $tag, $name_ext, $new_name);exit 1;
 	    $images->{"$name$ext"} = "$new_name";
 	    $element->attr($attr, uri_escape $new_name);
 	} elsif ($tag eq "a") {
@@ -460,7 +437,6 @@ sub doc_tree_remove_TOC {
 	    print "\tfound TOC: ".$a_tag->attr('class')."\n" ;
 	    $a_tag->detach;
 	}
-	
     }
     foreach my $a_tag ($tree->guts->look_down(_tag => "div")) {
 	if (defined $a_tag->attr('id') && $a_tag->attr('id') =~ m/^Table of Contents[0-9]$/ ){
@@ -483,6 +459,10 @@ sub doc_tree_clean_h {
     print "\tClean headings.\n";
     foreach my $a_tag ($tree->descendants()) {
 	next if $a_tag->tag !~ m/^h[0-9]{1,2}$/;
+	if ($a_tag->as_text =~ m/^\s*$/) {
+	    $a_tag->replace_with_content;
+	    next;
+	}
 	my $tmp = 1;
 	## stuff still there after first run
 	while ($tmp){
@@ -498,6 +478,8 @@ sub doc_tree_clean_h {
 			$b_tag->tag eq "font" ||
 			$b_tag->tag eq "span" )  {
 		    $b_tag->replace_with_content;
+		} elsif ($b_tag->tag eq "br") {
+		    $b_tag->tag('br_io');
 		}
 	    }
 	    foreach my $content_tag ($a_tag->content_refs_list) {
@@ -510,7 +492,7 @@ sub doc_tree_clean_h {
 			$b->push_content($p);
 			$b->push_content($img);
 			$a_tag->postinsert($b);
-		    } elsif ($$content_tag->tag eq "br" ||
+		    } elsif ($$content_tag->tag eq "br_io" ||
 			$$content_tag->tag eq "ref") {
 		    } else {
 			die "heading: ".$$content_tag->tag.".\n".$a_tag->as_HTML.".\n"  if ref $$content_tag;
@@ -568,7 +550,7 @@ sub doc_tree_remove_empty_span {
 	$worky = 0;
 	print "\tRemove empty span.\n";
 	foreach my $a_tag ($tree->guts->look_down(_tag => "span")) {
-	    if (! scalar $a_tag->all_external_attr_names) {
+	    if (! scalar $a_tag->all_external_attr_names || $a_tag->as_text =~ m/^\s*$/) {
 		$a_tag->replace_with_content ;
 		$worky = 1;
 	    }
@@ -580,17 +562,27 @@ sub doc_tree_remove_empty_span {
 sub doc_tree_clean_font {
     my $tree = shift;
     print "\tClean font.\n";
-    foreach my $a_tag ($tree->guts->look_down(_tag => "font")) {
-	foreach my $attr_name ($a_tag->all_external_attr_names()) {
-	    my $attr_value = $a_tag->attr($attr_name);
-	    next if ( $attr_name eq "color" );
-	    if ( $attr_name eq "face" || $attr_name eq "size"
-		    || ($attr_name eq "style" && $attr_value =~ m/^font-size: [0-9]{1,}pt$/i) ){
-		$a_tag->attr("$attr_name", undef);
-		next;
-	    }
-	    die "Attr name for font: $attr_name = $attr_value.\n";
-	}
+    my $worky = 1;
+    while ($worky) {
+      $worky = 0;
+      foreach my $a_tag ($tree->guts->look_down(_tag => "font")) {
+	  foreach my $attr_name ($a_tag->all_external_attr_names()) {
+	      my $attr_value = $a_tag->attr($attr_name);
+	      next if ( $attr_name eq "color" );
+	      if ( $attr_name eq "face"  ||
+		  ($attr_name eq "style" && $attr_value =~ m/^font-size: [0-9]{1,}pt$/i ) || $attr_name eq "size"){
+		  $a_tag->attr("$attr_name", undef);
+		  $worky = 0;
+  # 		next;
+	      } else {
+		  die "Attr name for font: $attr_name = $attr_value.\n";
+	      }
+	  }
+	  if ($a_tag->as_text =~ m/^\s*$/) {
+	      $a_tag->replace_with_content;
+	      $worky = 0;
+	  }
+      }
     }
     return $tree;
 }
@@ -719,7 +711,7 @@ sub doc_tree_clean_b_i {
 
 sub doc_tree_fix_paragraph_center {
     my $tree = shift;
-    print "\tFix centers.\n";
+    print "\tFix paragraph centers.\n";
     foreach my $a_tag ($tree->guts->look_down(_tag => "p")) {
 	my $exists_center = 0;
 	foreach my $attr_name ($a_tag->all_external_attr_names){
@@ -737,6 +729,18 @@ sub doc_tree_fix_paragraph_center {
     return $tree;
 }
 
+sub doc_tree_fix_center {
+    my $tree = shift;
+    print "\tFix centers.\n";
+    foreach my $a_tag ($tree->guts->look_down(_tag => "center")) {
+	foreach my $b_tag ($a_tag->descendants) {
+	    next if $b_tag->tag ne "center";
+	    $b_tag->tag('p');
+	}
+    }
+    return $tree;
+}
+
 sub html_tidy {
     my $html = shift;
     print "\tTidy up.\n";
@@ -746,15 +750,6 @@ sub html_tidy {
     return $html;
 }
 
-# sub doc_tree_clean_tables {
-#     my $tree = shift;
-#     print "\tClean tables.\n";
-#     foreach my $a_tag ($tree->guts->look_down(_tag => "td")) {
-# 	foreach my $attr_name ($a_tag->all_external_attr_names) {
-# 	    $a_tag->attr("$attr_name", undef) if $attr_name eq "style";
-# 	}
-#     }
-#     return $tree;
-# }
+
 
 return 1;

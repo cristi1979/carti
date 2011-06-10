@@ -112,8 +112,8 @@ sub wiki_get_all_images {
 }
 
 sub wiki_get_page {
-  my $self = shift;
-  my $page = $mw->get_page( { title => @_ } );
+  my ($self, $title) = @_;
+  my $page = $mw->get_page( { title => Encode::decode('utf8', $title) } );
   return $page;
 }
 
@@ -139,11 +139,11 @@ sub wiki_delete_page {
     foreach my $url (@img) {
       chomp $url;
 
-      my $page = $mw->get_page( { title => $url } );
+      my $page = $mw->get_page( { title => Encode::decode('utf8', $url) } );
       unless ( defined $page->{missing} ) {
 # next if $url =~ m/^File:/;
 	print "\tDelete page $url.\n";
-	$mw->edit( { action => 'delete', title => $url, reason => 'no longer needed' } )
+	$mw->edit( { action => 'delete', title => Encode::decode('utf8', $url), reason => 'no longer needed' } )
 	|| die "Could not delete url $url: ".$mw->{error}->{code} . ': ' . $mw->{error}->{details}."\n";
       }
     }
@@ -167,11 +167,11 @@ sub wiki_get_deleted_revs {
 sub wiki_edit_page {
   my ($self, $title, $text) = @_;
   print "\t-Uploading page for url $title.\n";
-  my $page = $mw->get_page( { title => $title } );
+  my $page = $mw->get_page( { title => Encode::decode('utf8', $title) } );
   print "\tCreating a new page for url $title.\n" if ($page->{missing});
   my $timestamp = $page->{timestamp};
 
-  $mw->edit( { action => 'edit', title => $title, text => Encode::decode('utf8', $text) } )
+  $mw->edit( { action => 'edit', title => Encode::decode('utf8', $title), text => Encode::decode('utf8', $text) } )
       || die "Could not upload text for $title: ".$mw->{error}->{code} . ': ' . $mw->{error}->{details}."\n";
   print "\t+Uploading page for url $title.\n";
 }
@@ -208,7 +208,7 @@ sub wiki_upload_file {
 
 sub wiki_exists_page {
     my ($self, $title) = @_;
-    my $page = $mw->get_page( { title => "$title" } );
+    my $page = $mw->get_page( { title => Encode::decode('utf8', $title) } );
 
     unless ( $page->{'*'} ) {
     return 0;
@@ -277,82 +277,6 @@ sub wiki_get_unused_images {
 	print "Done $nr_all out of $total, with $nr_ok good.\n" if ($nr_all%1000 == 0);
     }
     return $unused_img;
-}
-
-sub wiki_get_pages_using {
-    my ($self, $file, $nr) = @_;
-    my $limit = 5000; my $max = 1000;
-    if (defined $nr ) {
-	$limit = $nr; $max = 1;
-    }
-    $array = ();
-    $mw->list ( { action => 'query',
-	    list => 'imageusage', iulimit => "$limit",
-	    iutitle => "$file" },
-	{ max => "$max", hook => \&wiki_add_url } )
-		|| die $mw->{error}->{code} . ': ' . $mw->{error}->{details};
-    return $array;
-}
-
-sub wiki_get_pages_linking_to {
-    my ($self, $url) = @_;
-    $array = ();
-    $mw->list ( { action => 'query',
-	    list => 'backlinks', bllimit => "5000",
-	    bltitle => "$url" },
-	{ max => "1000", hook => \&wiki_add_url } )
-		|| die $mw->{error}->{code} . ': ' . $mw->{error}->{details};
-    return $array;
-} 
-
-sub wiki_get_pages_in_category {
-    my ($self, $cat, $nr) = @_;
-    my $limit = 5000; my $max = 1000;
-    if (defined $nr ) {
-	$limit = $nr; $max = 1;
-    }
-    $array = ();
-    $mw->list ( { action => 'query',
-	    list => 'categorymembers', iulimit => "$limit",
-	    cmtitle => "$cat" },
-	{ max => "$max", hook => \&wiki_add_url } )
-		|| die $mw->{error}->{code} . ': ' . $mw->{error}->{details};
-    return $array;
-} 
-
-sub wiki_add_url {
-    my ( $ref) = @_;
-
-    foreach (@$ref) {
-	my $info;
-# print Dumper($_);
-	if ( (scalar keys %$_) && defined $_->{'*'}) {
-	    $info = $_->{'*'};
-	} elsif ((scalar keys %$_) && defined $_->{'name'}) {
-	    $info = $_->{name};
-	} else {
-	    $info = $_->{title};
-	}
-	chomp $info;
-	push @$array, $info;
-# 	$nr_pages++;
-    }
-#     print "\tRetrieved $nr_pages pages.\n" if ($nr_pages%1000 == 0);
-}
-
-sub wiki_add_url2 {
-    my ( $ref) = @_;
-    my $q = ();
-
-    foreach (@$ref) {
-# 	my $w = $_->{'revisions'}->{'timestamp'};
-# 	$w =~ s/[TZ:-]//g;
-	push @$q, $_->{'title'};
-# 	push @$q, "$w!$_->{'title'}";
-# 	push @$q, $_->{'revisions'}->{'revid'};
-	push @$q, $_->{'revisions'};
-	$hash->{$_->{'ns'}} = $q;
-    }
 }
 
 return 1;

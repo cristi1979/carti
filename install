@@ -1,7 +1,6 @@
 drop database wikidb;
-create database wikidb CHARACTER SET binary COLLATE binary;
-
-grant drop,index, create, select, insert, update, delete, alter, lock tables on wikidb.* to 'wikiuser'@'localhost' identified by '!0wikiuser@9';
+create database wikidb;
+grant drop,index, create, select, insert, update, delete, alter, lock tables on wikidb.* to 'wikiuser'@'localhost' identified by 'qazwsx';
 grant super on *.* to  'wikiuser'@'localhost';
 SHOW CREATE TABLE text;
 

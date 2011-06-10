@@ -27,7 +27,6 @@ sub wiki_fix_chars {
     $wiki =~ s/\x{EF}\x{192}\x{201D}/\x{E2}\x{84}\x{A2}/gsi;
     $wiki =~ s/\x{c3}\x{af}\x{c6}\x{92}\x{e2}\x{80}\x{9d}/\x{E2}\x{84}\x{A2}/gsi;
     $wiki =~ s/\x{ef}\x{83}\x{94}/\x{E2}\x{84}\x{A2}/gsi;
-
     ## long line
     $wiki =~ s/\x{E2}\x{20AC}\x{201D}/\x{E2}\x{80}\x{93}/gsi;
     $wiki =~ s/\x{E2}\x{20AC}\x{201C}/\x{E2}\x{80}\x{93}/gsi;
@@ -65,8 +64,14 @@ sub wiki_fix_chars {
     $wiki =~ s/\x{c3}\x{af}\x{c6}\x{92}\x{c2}\x{bb}/\x{e2}\x{9c}\x{98}/gsi;
     ## CIRCLE BACKSLASH
     $wiki =~ s/\x{EF}\x{81}\x{2014}/\x{e2}\x{9c}\x{98}/gsi;
+    ## strange still: make some stars
+    $wiki =~ s/\x{c3}\x{b3}/\x{e2}\x{98}\x{85}/gsi;
+    $wiki =~ s/\x{ef}\x{80}\x{b6}/\x{e2}\x{98}\x{85}/gsi;
     ## some strange spaces
     $wiki =~ s/\x{c2}\x{a0}/ /gsi;
+    ## garbage it seems
+    $wiki =~ s/\x{ef}\x{82}\x{bc}//gsi;
+    $wiki =~ s/\x{c2}\x{ad}//gsi;
 
     return $wiki;
 }
@@ -120,7 +125,14 @@ sub wiki_fix_small_issues {
     $wiki =~ s/<br_io><\/br_io>/<br \\>/gm;
     $wiki =~ s/(<br \\>)+/<br \\>/mg;
     $wiki =~ s/<br \\><\/ref>/<\/ref>/mg;
-    
+    ### wiki specific
+    ## strange stuff
+    $wiki =~ s/\x{ef}\x{83}\x{b3}/<nowiki>***<\/nowiki>/gsi;
+    ## dashes, lists
+    $wiki =~ s/^\s*\*\s*$//gm;
+    $wiki =~ s/^\s*((<font color="#[0-9]{6}">)?)\s*(-|\x{e2}\x{80}\x{93})\s*/\n$1\x{e2}\x{80}\x{94} /gm;
+    $wiki =~ s/^\s*((<font color="#[0-9]{6}">)?)\s*\*\s*/\n$1\x{e2}\x{80}\x{94} /gm;
+
     return $wiki;
 }
 
