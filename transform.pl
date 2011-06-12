@@ -168,7 +168,7 @@ sub import_wiki {
     foreach my $tmp (split "&", $author) {
 	$tmp =~s/(^\s+|\s+$)//g;
 	$wiki .= "[[Category:$tmp]]\n";
-	$our_wiki->wiki_edit_page("Category:$tmp", "----") if ! $our_wiki->wiki_exists_page("Category:$tmp");
+	$our_wiki->wiki_edit_page("Category:$tmp", "[[Category:Autori]]\n----") if ! $our_wiki->wiki_exists_page("Category:$tmp");
     }
     ### wikitext_to_wikiweb
     $our_wiki->wiki_upload_file($image_files);

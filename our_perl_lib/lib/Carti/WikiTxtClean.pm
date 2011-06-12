@@ -128,6 +128,8 @@ sub wiki_fix_small_issues {
     ### wiki specific
     ## strange stuff
     $wiki =~ s/\x{ef}\x{83}\x{b3}/<nowiki>***<\/nowiki>/gsi;
+    ## smicolon start
+    $wiki =~ s/^;/\n<nowiki>;<\/nowiki>/gm;
     ## dashes, lists
     $wiki =~ s/^\s*\*\s*$//gm;
     $wiki =~ s/^\s*((<font color="#[0-9]{6}">)?)\s*(-|\x{e2}\x{80}\x{93})\s*/\n$1\x{e2}\x{80}\x{94} /gm;
