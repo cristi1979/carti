@@ -65,7 +65,6 @@ sub wiki_fix_chars {
     ## CIRCLE BACKSLASH
     $wiki =~ s/\x{EF}\x{81}\x{2014}/\x{e2}\x{9c}\x{98}/gsi;
     ## strange still: make some stars
-    $wiki =~ s/\x{c3}\x{b3}/\x{e2}\x{98}\x{85}/gsi;
     $wiki =~ s/\x{ef}\x{80}\x{b6}/\x{e2}\x{98}\x{85}/gsi;
     ## some strange spaces
     $wiki =~ s/\x{c2}\x{a0}/ /gsi;

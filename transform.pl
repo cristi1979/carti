@@ -3,14 +3,21 @@ print "Start.\n";
 use warnings;
 use strict;
 $SIG{__WARN__} = sub { die @_ };
-
 # #     get utf8 codes from http://www.fileformat.info/info/unicode/char/25cb/index.htm
 # perl -e 'print sprintf("\\x{%x}", $_) foreach (unpack("C*", "Ó"));print"\n"'
+use Cwd 'abs_path';
+use File::Basename;
+
+BEGIN {
+  unless ($ENV{BEGIN_BLOCK}) {
+    $ENV{LD_LIBRARY_PATH} = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."/tools/calibre/lib/";
+    $ENV{BEGIN_BLOCK} = 1;
+    exec 'env',$0,@ARGV;
+  }
+}
 
 use File::Find;
 use File::Copy;
-use Cwd 'abs_path';
-use File::Basename;
 my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
 use lib (fileparse(abs_path($0), qr/\.[^.]*/))[1]."our_perl_lib/lib";
 
@@ -26,20 +33,19 @@ use Carti::HtmlClean;
 use Carti::Common;
 use Carti::WikiTxtClean;
 
-my $wiki_site = "http://10.11.4.45/wiki";
+# my $wiki_site = "http://10.11.4.45/wiki";
 # my $wiki_site = "http://localhost:2900/wiki";
-# my $wiki_site = "http://192.168.0.102/wiki";
+# my $wiki_site = "http://192.168.0.163/wiki";
+my $wiki_site = "http://localhost/wiki";
 
 my $docs_prefix = shift;
-# $docs_prefix = "/mnt/home/cristi/programe/scripts/carti/code/books";
-$docs_prefix = abs_path($docs_prefix);
 my $work_prefix = "work";
-# my $work_dir = "";
+
 my $colors = "yes";
 my $our_wiki;
 my $debug = 1;
-my $total = 0;
-my $crt = 0;
+my $url_sep = " -- ";
+my $font = "BookmanOS.ttf";
 
 sub generate_html_file {
     my $doc_file = shift;
@@ -49,7 +55,7 @@ sub generate_html_file {
     eval {
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 46800; # 13 hours
-	system("python", "$script_dir/unoconv", "-f", "html", "$doc_file") == 0 or die "unoconv failed: $?";
+	system("python", "$script_dir/tools/unoconv", "-f", "html", "$doc_file") == 0 or die "unoconv failed: $?";
 	$status = $?;
 	alarm 0;
     };
@@ -108,6 +114,7 @@ sub make_wiki {
     $html =~ s/&nbsp;/-/gsi;
     ### clean_html_from_doc
     my $tree = HtmlClean::get_tree($html);
+    $tree = HtmlClean::doc_tree_clean_defs($tree);
     $tree = HtmlClean::doc_tree_remove_TOC($tree);
     ($tree, $image_files) = HtmlClean::doc_tree_fix_links($tree, $no_links);
 # Common::write_file("$work_dir/".$i++." html.html", HtmlClean::html_tidy($tree->as_HTML('<>&', "\t")));
@@ -125,7 +132,7 @@ sub make_wiki {
     $tree = HtmlClean::doc_tree_fix_center($tree);
     $html = $tree->as_HTML('<>&', "\t");
     $tree = $tree->delete;
-#     Common::write_file("$work_dir/$book cleaned.html", HtmlClean::html_tidy($html));
+# Common::write_file("$work_dir/cleaned.html", HtmlClean::html_tidy($html));exit 1;
     my $orig_images = $image_files;
     $image_files = ();
     foreach (sort keys %$orig_images) {
@@ -151,7 +158,7 @@ sub make_wiki {
     );
 
     my $wiki = $wc->html2wiki(Encode::encode('utf8', $html));
-# Common::write_file("$work_dir/$book 1.wiki", Encode::decode('utf8', $wiki));
+# Common::write_file("$work_dir/1.wiki", Encode::decode('utf8', $wiki));
     unlink $html_file;
     return ($wiki, $image_files);
 }
@@ -162,6 +169,7 @@ sub import_wiki {
     $wiki = WikiTxtClean::wiki_fix_chars($wiki);
 # Common::write_file("$work_dir/$title 2.wiki", Encode::decode('utf8', $wiki));
     $wiki = WikiTxtClean::wiki_fix_empty_center($wiki);
+# Common::write_file("$work_dir/$title 3.wiki", Encode::decode('utf8', $wiki));
     $wiki = WikiTxtClean::wiki_fix_small_issues($wiki);
 #     $wiki = WikiTxtClean::wiki_guess_headings($wiki);
     $wiki .= "\n\n----\n=Note de subsol=\n\n<references />\n\n";
@@ -177,38 +185,15 @@ sub import_wiki {
     $our_wiki->wiki_edit_page("$title", $wiki);
 }
 
-# sub wikiweb_to_html {
-#     my $book = shift;
-#     my $i = 1;
-# # $book = "NASA";
-# # $work_dir = "/mnt/home/cristi/programe/scripts/carti/code/work/$book";
-# # remove_tree("$work_dir") || die "Can't remove dir $work_dir: $!.\n" if -d "$work_dir";
-# # Common::makedir($work_dir);
-# 
-#     my @cmd_output = `wget -P "$work_dir" -k --no-directories --no-host-directories --adjust-extension --convert-links --page-requisites "$wiki_site/index.php?title=$book&printable=yes"`;
-#     rename("$work_dir/index.php?title=$book&printable=yes.html", "$work_dir/$book.html");
-#     my $html_file = "$work_dir/index.php.html";
-#     my $html = Common::read_file("$html_file");
-#     ### clean_html_from_wikiweb
-#     my $tree = HtmlClean::get_tree($html);
-#     $tree = HtmlClean::wiki_tree_clean_css($tree, $work_dir);
-#     $tree = HtmlClean::wiki_tree_clean_wiki($tree);
-# #     $tree = HtmlClean::wiki_tree_fix_links($tree, $wiki_site);
-#     Common::write_file("$work_dir/$book.html", $tree->as_HTML('<>&', "\t"));
-#     $tree = HtmlClean::wiki_tree_clean_script($tree);
-#     ### html_to_epub
-#     `ebook-convert "$work_dir/$book.html" .epub --no-default-epub-cover --disable-font-rescaling --minimum-line-height=0 --smarten-punctuation --chapter=/ --no-chapters-in-toc --input-profile=default --output-profile=sony300`;
-# }
-
 sub work_docs {
     my ($author, $books) = @_;
     die "no author.\n" if $author =~ m/^\s*$/;
     foreach my $book (sort keys %$books) {
 	my $file = $books->{$book};
-# next if $file !~ m/Un comando pe dou\x{c4}\x{83} continente/i;
-	print "\n". '-'x10 ."\t".$crt++." out of $total\n$book\n";
-	my $title = "$author -- $book";
-	$book = "$author -- $book";
+next if $file !~ m/Manusa de otel/i;
+# 	print "\n". '-'x10 ."\t".$crt++." out of $total\n$book\n";
+	my $title = "$author$url_sep$book";
+	$book = "$author$url_sep$book";
 	### import doc to wiki
 	my ($name,$dir,$ext) = fileparse(Common::normalize_text($file), qr/\.[^.]*/);
 	my $work_dir = "$script_dir/$work_prefix/$book";
@@ -227,43 +212,118 @@ next if -d "$work_dir";
     }
 }
 
-sub extract_from_wiki {
-      ### extract html from wiki
-#       $work_dir = "$script_dir/$work_prefix/$book/wiki";
-#       remove_tree("$work_dir") || die "Can't remove dir $work_dir: $!.\n" if -d "$work_dir";
-#       Common::makedir($work_dir);
-#       wikiweb_to_html($book);
+sub set_font_path {
+    my $font_path = shift;
+    my $extra_css = "
+\@font-face{font-family:\"Bookman\";font-style:normal;font-weight:normal;src:url(res:$font_path)}
+\@font-face{font-family:\"Bookman\";font-style:normal;font-weight:bold;src:url(res:$font_path)}
+\@font-face{font-family:\"Bookman\";font-style:italic;font-weight:normal;src:url(res:$font_path)}
+\@font-face{font-family:\"Bookman\";font-style:italic;font-weight:bold;src:url(res:$font_path)}
+p,table{font-family:\"Bookman\"}
+li,table.wikitable {font-family:\"Bookman\";}
+h1,h2,h3,h4,h5,h6,h7,h8 {font-family:\"Bookman\";}
+";
+    $extra_css =~ s/\n+//gms;
+    return $extra_css;
 }
-#     
-#     
-#     
-#     epub/html_to_mobi
-#     wikiweb_to_pdf
+
+sub wikiweb_to_epub {
+    my ($book, $work_dir) = @_;
+    my $link = $book;
+    $link =~ s/&/\%26/;
+    my @cmd_output = `wget -P "$work_dir" -k --no-directories --no-host-directories --adjust-extension --convert-links --page-requisites "$wiki_site/index.php?title=$link&printable=yes" -o /dev/null`;
+    my @files;
+    find( sub {push @files, "$File::Find::name" if (/\.html$/)}, $work_dir);
+    die "too many html: ". Dumper(@files). "\n" if scalar @files != 1;
+    ### because wget is insane
+    my $html_file = "$work_dir/$book.html";
+    my $q = `find \"$work_dir\" -print0 | grep -z \".html\$\" | xargs -0 -I {} mv {} \"$html_file\"`;
+    my $html = Common::read_file("$html_file");
+    ### clean_html_from_wikiweb
+    my $images;
+    my $tree = HtmlClean::get_tree($html);
+    $tree = HtmlClean::wiki_tree_clean_script($tree, $work_dir);
+    $tree = HtmlClean::wiki_tree_clean_css($tree, $work_dir);
+    $tree = HtmlClean::wiki_tree_clean_wiki($tree);
+    ($tree, $images) = HtmlClean::wiki_tree_fix_links($tree, $wiki_site);
+    $html = $tree->as_HTML('<>&', "\t");
+# Common::write_file(encode_utf8("$html_file"), $tree->as_HTML('<>&', "\t"));
+    ### html_to_epub
+    Common::write_file(encode_utf8("$html_file"), HtmlClean::html_tidy($tree->as_HTML('<>&', "\t")));
+#     Common::write_file(encode_utf8("$html_file"), $tree->as_HTML('<>&', "\t"));
+    $tree = $tree->delete;
+    my ($name,$dir,$ext) = fileparse($html_file, qr/\.[^.]*/);
+    my ($authors, $title) = $name =~ m/^(.*?)$url_sep(.*)$/;
+    $authors =~ s/(\s*&\s*)/&/g;
+
+    ### normal epub
+    print "Converting to epub.\n";
+    `$script_dir/tools/calibre/ebook-convert \"$html_file\" \"$dir/$name.epub\" --no-default-epub-cover --disable-font-rescaling --minimum-line-height=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --title=\"$title\" --authors=\"$authors\"`;
+    ### epub with external font
+    print "Converting to epub with external font.\n";
+    my $font_css = set_font_path("///Data/fonts/$font");
+    `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/fontextern_$name.epub\" --extra-css="$font_css"`;
+    ### epub with embedded font
+    print "Converting to epub with embedded font.\n";
+    $font_css = set_font_path("$font");
+    `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/fontintern_$name.epub\" --extra-css='$font_css'`;
+    Common::add_file_to_zip("$dir/fontintern_$name.epub", "$script_dir/$font");
+    ### epub with ascii chars
+    print "Converting to ascii epub.\n";
+    `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/ascii_$name.epub\" --asciiize`;
+    ### normal mobi
+    print "Converting to mobi.\n";
+    `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/$name.mobi\"`;
+    ### mobi with ascii chars
+    print "Converting to ascii mobi.\n";
+    `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/ascii_$name.mobi\" --asciiize`;
+    ### normal fb2
+    print "Converting to fb2.\n";
+    `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/ascii_$name.fb2\"`;
+}
+#  - --cover --series --series-index --tags=comma separated  --rating=between 1 and 5
+
 #     wikiweb_to_odt
+#     odt/wikiweb_to_pdf
 #     odt_to_rtf
 #     odt_to_doc
 #     odt_to_docx
 # extract_html();
 # wikiweb_to_html;
-# exit 1;
-# $work_dir = "$script_dir/work/";
-my $files_to_import = get_documents;
-foreach my $type (keys %$files_to_import) {
-    if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) { # || $type =~ m/\.rtf$/i 
-	$total += scalar (keys %{$files_to_import->{$type}->{$_}}) foreach (keys %{$files_to_import->{$type}});
-	print "Start working for $type: $total books.\n";
-	foreach my $author (sort keys %{$files_to_import->{$type}}) {
-	    work_docs($author, $files_to_import->{$type}->{$author});
+
+sub import_documents {
+    $docs_prefix = abs_path($docs_prefix);
+    my $files_to_import = get_documents;
+    foreach my $type (keys %$files_to_import) {
+	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) { # || $type =~ m/\.rtf$/i 
+# 	    $total += scalar (keys %{$files_to_import->{$type}->{$_}}) foreach (keys %{$files_to_import->{$type}});
+# 	    print "Start working for $type: $total books.\n";
+	    foreach my $author (sort keys %{$files_to_import->{$type}}) {
+		work_docs($author, $files_to_import->{$type}->{$author});
+	    }
+# 	} elsif ($type =~ m/\.rtf$/i) {
+	} elsif ($type =~ m/\.gif$/i || $type =~ m/\.jpg$/i) {
+	} elsif ($type =~ m/\.txt$/i) {
+	} elsif ($type =~ m/\.html?$/i) {
+	} elsif ($type =~ m/\.pdf$/i) {
+	} elsif ($type =~ m/\.epub$/i) {
+	} elsif ($type =~ m/\.zip$/i) {
+	} elsif ($type =~ m/\.js$/i) {
+	} else {
+	    print Dumper($files_to_import->{$type})."\nUnknown file type: $type.\n";
 	}
-    } elsif ($type =~ m/\.rtf$/i) {
-    } elsif ($type =~ m/\.gif$/i || $type =~ m/\.jpg$/i) {
-    } elsif ($type =~ m/\.txt$/i) {
-    } elsif ($type =~ m/\.html?$/i) {
-    } elsif ($type =~ m/\.pdf$/i) {
-    } elsif ($type =~ m/\.epub$/i) {
-    } elsif ($type =~ m/\.zip$/i) {
-    } elsif ($type =~ m/\.js$/i) {
-    } else {
-	print Dumper($files_to_import->{$type})."\nUnknown file type: $type.\n";
     }
+}
+
+# import_documents();
+# exit 1;
+$our_wiki = new WikiWork("$wiki_site", 'admin', 'qazwsx');
+# my $docs = $our_wiki->wiki_get_all_pages;
+foreach my $book (@{$our_wiki->wiki_get_all_pages}) {
+#     $book = Encode::encode('utf8', $book);
+next if $book !~ m/Manusa de otel/i;
+    my $work_dir = "$script_dir/$work_prefix/$book";
+next if -d "$work_dir";
+    Common::makedir($work_dir);
+    wikiweb_to_epub($book, $work_dir);
 }

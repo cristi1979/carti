@@ -11,6 +11,7 @@ use File::Path qw(make_path remove_tree);
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 use Unicode::Normalize 'NFD','NFC','NFKD','NFKC';
+use Archive::Zip qw( :ERROR_CODES );
 
 sub get_file_md5 {
     my $doc_file = shift;
@@ -20,6 +21,14 @@ sub get_file_md5 {
     close(FILE);
 #     my $doc_md5 = "123";
     return $doc_md5;
+}
+
+sub add_file_to_zip {
+    my ($zip_file, $add_file) = @_;
+    my $zip = Archive::Zip->new();
+    $zip->read("$zip_file") == AZ_OK or die "read error\n";
+    $zip->addFile("$add_file");
+    $zip->overwrite()     == AZ_OK or die "write error\n";
 }
 
 sub normalize_text {

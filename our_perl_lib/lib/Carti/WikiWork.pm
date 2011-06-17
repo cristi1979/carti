@@ -251,6 +251,7 @@ sub wiki_get_redirects {
 
 sub wiki_get_all_pages {
     my ($self, $ns) = @_;
+    $ns = 0 if ! defined $ns;
     $array = ();
     $mw->list ( { action => 'query',
 	    list => 'allpages', aplimit=>'5000',
@@ -277,6 +278,23 @@ sub wiki_get_unused_images {
 	print "Done $nr_all out of $total, with $nr_ok good.\n" if ($nr_all%1000 == 0);
     }
     return $unused_img;
+}
+
+sub wiki_add_url {
+    my ( $ref) = @_;
+
+    foreach (@$ref) {
+	my $info;
+	if ( (scalar keys %$_) && defined $_->{'*'}) {
+	    $info = $_->{'*'};
+	} elsif ((scalar keys %$_) && defined $_->{'name'}) {
+	    $info = $_->{name};
+	} else {
+	    $info = $_->{title};
+	}
+	chomp $info;
+	push @$array, $info;
+    }
 }
 
 return 1;
