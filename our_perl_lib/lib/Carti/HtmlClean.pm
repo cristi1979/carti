@@ -177,7 +177,7 @@ sub doc_tree_is_empty_p {
 
 sub doc_tree_clean_tables {
     my $tree = shift;
-
+    print "\tClean tables.\n";
     foreach my $a_tag ($tree->guts->look_down(_tag => "table")) {
 	### replace all headings with bold
 	foreach my $b_tag ($a_tag->descendants()) {
@@ -264,8 +264,32 @@ sub doc_tree_clean_tables {
     return $tree;
 }
 
+sub doc_tree_clean_pre {
+    my $tree = shift;
+    print "\tClean pre.\n";
+    foreach my $a_tag ($tree->guts->look_down(_tag => "pre")) {
+	foreach my $b_tag ($a_tag->content_refs_list){
+	    die "strange pre.\n" if ref $$b_tag;
+	    my $txt = $$b_tag;
+	    my @lines = split "\n", $txt;
+	    my $a_ref = HTML::Element->new('p');
+	    foreach my $line (@lines) {
+		if ($line !~ m/^\s*$/) {
+		    $a_ref->push_content(['p'],$line);
+		} else {
+		    $a_ref->push_content(['br']);
+		}
+# 		print "xxx $line xxx\n";exit 1;
+	    }
+	    $a_tag->replace_with( $a_ref );
+	}
+    }
+    return $tree;
+}
+
 sub wiki_tree_clean_wiki {
     my $tree = shift;
+    print "\tClean wiki.\n";
     my @to_delete = ();
     push @to_delete, $tree->guts->look_down(_tag => 'link');
     push @to_delete, $tree->guts->look_down(_tag => 'meta');
@@ -414,13 +438,16 @@ sub doc_tree_fix_links {
 	die "Strange ref nr $nr.\n" if !defined $ref_hash->{$nr}->{'h_anc'} || !defined $ref_hash->{$nr}->{'h_sym'};
 	my $txt;
 	$txt = ($ref_hash->{$nr}->{'h_anc'}->look_up("_tag", 'p'))[0];
+# print Dumper($nr);
 	if (! defined $txt) {
 	    $txt = ($ref_hash->{$nr}->{'h_anc'}->look_up("_tag", 'h6'))[0];
+	    $txt = ($ref_hash->{$nr}->{'h_anc'}->look_up("_tag", 'h1'))[0] if ! defined $txt;
 	    $txt->tag('p');
 	}
 	my $a_ref = HTML::Element->new('ref');
 	my $have_text = 0;
-	if ($txt->parent->tag eq "div" && defined $txt->parent->attr('id') && $txt->parent->attr('id') =~ m/^sdfootnote/) {
+	if ($txt->parent->tag eq "div" && defined $txt->parent->attr('id') && 
+		($txt->parent->attr('id') =~ m/^sdfootnote/ || $txt->parent->attr('id') =~ m/^Section/)) {
 	    $txt = $txt->parent;
 	    foreach my $a_tag ($txt->look_down(_tag => 'p')) {
 		my $tmp = $a_tag->as_text;
@@ -479,6 +506,7 @@ sub doc_tree_clean_defs {
 sub doc_tree_clean_h {
     my $tree = shift;
     print "\tClean headings.\n";
+    my @delete_later = ();
     foreach my $a_tag ($tree->descendants()) {
 	next if $a_tag->tag !~ m/^h[0-9]{1,2}$/;
 	if ($a_tag->as_text =~ m/^\s*$/) {
@@ -515,7 +543,13 @@ sub doc_tree_clean_h {
 			$b->push_content($img);
 			$a_tag->postinsert($b);
 		    } elsif ($$content_tag->tag eq "br_io" ||
+			$$content_tag->tag eq "sup" ||
 			$$content_tag->tag eq "ref") {
+		    } elsif ($$content_tag->tag eq "table") {
+			my $table = $$content_tag->clone;
+			push @delete_later, $$content_tag;
+# 			$$content_tag->delete;
+			$a_tag->preinsert($table);
 		    } else {
 			die "heading: ".$$content_tag->tag.".\n".$a_tag->as_HTML.".\n"  if ref $$content_tag;
 		    }
@@ -529,6 +563,7 @@ sub doc_tree_clean_h {
 	    }
 	}
     }
+    $_->delete foreach (@delete_later);
     return $tree;
 }
 
@@ -655,7 +690,7 @@ sub doc_tree_clean_span {
 			$res .= $att.";";
 			$imgs = $1 if ($att =~ m/^\s*width: ([0-9.]{1,}(px|in))\s*$/i);
 		    } elsif ($att =~ m/^\s*background: #[0-9a-fA-F]{6} url(.*)\((.*)\)(.*)/i) {
-die "Attr name for background span_style = $att.\n";
+# die "Attr name for background span_style = $att.\n";
 			my $img = $2;
 			my $p = HTML::Element->new('p');
 			my $imge = HTML::Element->new('img');
@@ -672,7 +707,7 @@ die "Attr name for background span_style = $att.\n";
 				    || $att =~ m/^\s*(top|left|right): -?[0-9]{1,}(\.[0-9]{1,})?in\s*$/i
 				    || $att =~ m/^\s*(border|padding)/i
 				    || $att =~ m/^\s*font-family:/i
-				    || $att =~ m/^\s*so-language: (ro-RO)?$/i
+				    || $att =~ m/^\s*so-language: /i
 				    || $att =~ m/^\s*font-size: [0-9]{1,}%\s*$/i;
 die "Attr name for span_style = $att.\n";
 			$res .= $att.";";

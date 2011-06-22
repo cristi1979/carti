@@ -10,7 +10,7 @@ use File::Basename;
 
 BEGIN {
   unless ($ENV{BEGIN_BLOCK}) {
-    $ENV{LD_LIBRARY_PATH} = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."/tools/calibre/lib/";
+#     $ENV{LD_LIBRARY_PATH} = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."/tools/calibre/lib/";
     $ENV{BEGIN_BLOCK} = 1;
     exec 'env',$0,@ARGV;
   }
@@ -27,6 +27,7 @@ use Encode;
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 use HTML::Tidy;
+# use HTML::TextToHTML;
 
 use Carti::WikiWork;
 use Carti::HtmlClean;
@@ -35,8 +36,8 @@ use Carti::WikiTxtClean;
 
 # my $wiki_site = "http://10.11.4.45/wiki";
 # my $wiki_site = "http://localhost:2900/wiki";
-# my $wiki_site = "http://192.168.0.163/wiki";
-my $wiki_site = "http://localhost/wiki";
+my $wiki_site = "http://192.168.0.163/wiki";
+# my $wiki_site = "http://localhost/wiki";
 
 my $docs_prefix = shift;
 my $work_prefix = "work";
@@ -50,25 +51,29 @@ my $font = "BookmanOS.ttf";
 sub generate_html_file {
     my $doc_file = shift;
     my ($name,$dir,$suffix) = fileparse($doc_file, qr/\.[^.]*/);
+    if ($suffix =~ m/^\.txt$/i) {
+	`iconv -f cp1250 -t utf-8 "$doc_file" > "$dir/utf_$name$suffix"`;
+	move("$dir/utf_$name$suffix", "$doc_file") || die "can't move file.\n";
+    }
     print "\t-Generating html file from $doc_file.\n";
     my $status;
     eval {
 	local $SIG{ALRM} = sub { die "alarm\n" };
-	alarm 46800; # 13 hours
+	alarm 600; # 13 hours
 	system("python", "$script_dir/tools/unoconv", "-f", "html", "$doc_file") == 0 or die "unoconv failed: $?";
-	$status = $?;
 	alarm 0;
     };
+    $status = $?;
     if ($status) {
 	printf "Error: Timed out: $status. Child exited with value %d\n", $status >> 8;
 	eval {
 	    local $SIG{ALRM} = sub { die "alarm\n" };
-	    alarm 46800; # 13 hours
+	    alarm 600; # 13 hours
 	    system("Xvfb :10235 -screen 0 1024x768x16 &> /dev/null &");
 	    system("libreoffice", "-display", ":10235", "-unnaccept=all", "-invisible", "-nocrashreport", "-nodefault", "-nologo", "-nofirststartwizard", "-norestore", "-convert-to", "html:HTML (StarWriter)", "-outdir", "$dir", "$doc_file") == 0 or die "libreoffice failed: $?";
-	    $status = $?;
 	    alarm 0;
 	};
+	$status = $?;
 	if ($status) {
 	    printf "Error: Timed out: $status. Child exited with value %d\n", $status >> 8;
 	} else {
@@ -106,18 +111,19 @@ sub make_wiki {
     my $image_files = ();
     my $no_links = 0;
 #     $no_links = 0 if $book eq "dudu -- Fracurile Negre III - 01 Manusa de otel";
-    my $i = 1;
+# my $i = 1;
     my $html = Common::read_file("$html_file");
     ## this should be minus?
     $html =~ s/\x{1e}/-/gsi;
     $html =~ s/\x{2}//gsi;
-    $html =~ s/&nbsp;/-/gsi;
     ### clean_html_from_doc
     my $tree = HtmlClean::get_tree($html);
+# Common::write_file("$work_dir/".$i++." html.html", HtmlClean::html_tidy($tree->as_HTML('<>&', "\t")));
     $tree = HtmlClean::doc_tree_clean_defs($tree);
     $tree = HtmlClean::doc_tree_remove_TOC($tree);
+# Common::write_file("$work_dir/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
     ($tree, $image_files) = HtmlClean::doc_tree_fix_links($tree, $no_links);
-# Common::write_file("$work_dir/".$i++." html.html", HtmlClean::html_tidy($tree->as_HTML('<>&', "\t")));
+# Common::write_file("$work_dir/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
     $tree = HtmlClean::doc_tree_clean_color($tree) if $colors !~ m/^yes$/i;
     $tree = HtmlClean::doc_tree_clean_font($tree);
     $tree = HtmlClean::doc_tree_remove_empty_font($tree);
@@ -130,9 +136,10 @@ sub make_wiki {
     $tree = HtmlClean::doc_tree_clean_tables($tree);
     $tree = HtmlClean::doc_tree_fix_paragraph_center($tree);
     $tree = HtmlClean::doc_tree_fix_center($tree);
+    $tree = HtmlClean::doc_tree_clean_pre($tree);
     $html = $tree->as_HTML('<>&', "\t");
     $tree = $tree->delete;
-# Common::write_file("$work_dir/cleaned.html", HtmlClean::html_tidy($html));exit 1;
+# Common::write_file("$work_dir/cleaned.html", HtmlClean::html_tidy($html));
     my $orig_images = $image_files;
     $image_files = ();
     foreach (sort keys %$orig_images) {
@@ -166,11 +173,13 @@ sub make_wiki {
 sub import_wiki {
     my ($wiki, $title, $image_files, $work_dir, $author) = @_;
     $our_wiki = new WikiWork("$wiki_site", 'admin', 'qazwsx');
+# Common::write_file("$work_dir/$title 0.wiki", Encode::decode('utf8', $wiki));
     $wiki = WikiTxtClean::wiki_fix_chars($wiki);
-# Common::write_file("$work_dir/$title 2.wiki", Encode::decode('utf8', $wiki));
+# Common::write_file("$work_dir/$title 1.wiki", Encode::decode('utf8', $wiki));
     $wiki = WikiTxtClean::wiki_fix_empty_center($wiki);
-# Common::write_file("$work_dir/$title 3.wiki", Encode::decode('utf8', $wiki));
+# Common::write_file("$work_dir/$title 2.wiki", Encode::decode('utf8', $wiki));
     $wiki = WikiTxtClean::wiki_fix_small_issues($wiki);
+# Common::write_file("$work_dir/$title 3.wiki", Encode::decode('utf8', $wiki));
 #     $wiki = WikiTxtClean::wiki_guess_headings($wiki);
     $wiki .= "\n\n----\n=Note de subsol=\n\n<references />\n\n";
     foreach my $tmp (split "&", $author) {
@@ -190,7 +199,7 @@ sub work_docs {
     die "no author.\n" if $author =~ m/^\s*$/;
     foreach my $book (sort keys %$books) {
 	my $file = $books->{$book};
-next if $file !~ m/Manusa de otel/i;
+# next if $file !~ m/Mircea Vulcanescu/i;
 # 	print "\n". '-'x10 ."\t".$crt++." out of $total\n$book\n";
 	my $title = "$author$url_sep$book";
 	$book = "$author$url_sep$book";
@@ -295,15 +304,16 @@ sub import_documents {
     $docs_prefix = abs_path($docs_prefix);
     my $files_to_import = get_documents;
     foreach my $type (keys %$files_to_import) {
-	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) { # || $type =~ m/\.rtf$/i 
+	if ($type =~ m/\.txt?$/i) {
+# 	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) {
 # 	    $total += scalar (keys %{$files_to_import->{$type}->{$_}}) foreach (keys %{$files_to_import->{$type}});
-# 	    print "Start working for $type: $total books.\n";
+	    print "Start working for $type.\n";
 	    foreach my $author (sort keys %{$files_to_import->{$type}}) {
 		work_docs($author, $files_to_import->{$type}->{$author});
 	    }
 # 	} elsif ($type =~ m/\.rtf$/i) {
 	} elsif ($type =~ m/\.gif$/i || $type =~ m/\.jpg$/i) {
-	} elsif ($type =~ m/\.txt$/i) {
+# 	} elsif ($type =~ m/\.txt$/i) {
 	} elsif ($type =~ m/\.html?$/i) {
 	} elsif ($type =~ m/\.pdf$/i) {
 	} elsif ($type =~ m/\.epub$/i) {
@@ -315,8 +325,8 @@ sub import_documents {
     }
 }
 
-# import_documents();
-# exit 1;
+import_documents();
+exit 1;
 $our_wiki = new WikiWork("$wiki_site", 'admin', 'qazwsx');
 # my $docs = $our_wiki->wiki_get_all_pages;
 foreach my $book (@{$our_wiki->wiki_get_all_pages}) {

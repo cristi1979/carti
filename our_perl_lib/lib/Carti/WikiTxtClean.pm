@@ -110,7 +110,7 @@ sub wiki_fix_small_issues {
     ## remove empty headings
     $wiki =~ s/\n=+\n/\n/gm;;
     ## remove consecutive blank lines
-    $wiki =~ s/(\n){4,}/\n\n/gs;
+    $wiki =~ s/(\n){4,}/\n\n\n/gs;
     $wiki =~ s/^[ \t]+//mg;
     ## collapse spaces
     $wiki =~ s/[ \t]{2,}/ /mg;
@@ -118,16 +118,16 @@ sub wiki_fix_small_issues {
     $wiki =~ s/^([ \t]*=+[ \t]*)(.*?)([ \t]*=+[ \t]*)$/\n\n$1$2$3\n/gm;
     $wiki =~ s/^\{\|(.*)$/\n\{\|$1 class="wikitable" /mg;
     $wiki =~ s/\|}\s*{\|/\|}\n\n\n{\|/mg;
-    $wiki =~ s/^[:\s]*$//gm;
+    $wiki =~ s/^:*$//gm;
     $wiki =~ s/\-\-\-\-\n+=Note de subsol=\n*//m;
     ## me
     $wiki =~ s/<br_io><\/br_io>/<br \\>/gm;
-    $wiki =~ s/(<br \\>)+/<br \\>/mg;
+#     $wiki =~ s/(<br \\>)+/<br \\>/mg;
     $wiki =~ s/<br \\><\/ref>/<\/ref>/mg;
     ### wiki specific
     ## strange stuff
     $wiki =~ s/\x{ef}\x{83}\x{b3}/<nowiki>***<\/nowiki>/gsi;
-    ## smicolon start
+    ## semicolon start
     $wiki =~ s/^;/\n<nowiki>;<\/nowiki>/gm;
     ## dashes, lists
     $wiki =~ s/^\s*\*\s*$//gm;

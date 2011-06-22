@@ -45,8 +45,24 @@ sub find_subtitles {
     return $subtitle;
 }
 
-sub convert_subtitle {
-    my ($sub_file_name, $movie, $w, $h) = @_;
+sub get_video_size {
+    my $info = shift;
+    my @extra_opts;
+    my $w = $info->{ID_VIDEO_WIDTH};
+    my $h = $info->{ID_VIDEO_HEIGHT};
+    if ($w>1280 || $h>720 ){
+	print "\twrong WxH: $w x $h.Downscalling to W=1280.\n";
+# 	print "\twrong WxH: $w x $h.Downscalling to W=1280.\n" ;
+	$h = 1280 * $h / $w;
+	$w = 1280;
+	push @extra_opts, ("-w", "1280");
+    }
+    return ($w, $h, @extra_opts);
+}
+
+sub work_on_subtitle {
+    my ($movie, $info) = @_;
+    my ($w, $h) = get_video_size($info);
 
     my ($name,$dir,$suffix) = fileparse($sub_file_name, qr/\.[^.]*/);
 
@@ -132,6 +148,14 @@ Format: Layer, Start, End, Style, Actor, MarginL, MarginR, MarginV, Effect, Text
     return $ass_file_name;
 }
 
+sub work_on_audio {
+    my ($movie, $info) = @_;
+}
+
+sub work_on_video {
+    my ($movie, $info) = @_;
+}
+
 sub work_on_file {
     my ($movie, $info) = @_;
     my $srt = "";
@@ -152,15 +176,6 @@ sub work_on_file {
     if (! -d "$bkp_path/$name") {mkpath("$bkp_path/$name") || die "mkdir $bkp_path/$name: $!\n";}
     if (! -d "$bkp_srt_path/$name") {mkpath("$bkp_srt_path/$name") || die "mkdir $bkp_srt_path/$name: $!\n";}
 
-    my $w = $info->{ID_VIDEO_WIDTH};
-    my $h = $info->{ID_VIDEO_HEIGHT};
-    if ($w>1280 || $h>720 ){
-	print "\twrong WxH: $w x $h.\n" if ! ($w>1280 && $h>720);
-	print "\twrong WxH: $w x $h.Downscalling to W=1280.\n" ;
-	$h = 1280 * $h / $w;
-	$w = 1280;
-	push @extra_opts, ("-w", "1280");
-    }
 
     my $acodec = $info->{ID_AUDIO_CODEC};
     my $vcodec = $info->{ID_VIDEO_CODEC};
@@ -171,9 +186,6 @@ sub work_on_file {
 
     if ($srt ne "") {
 	copy("$srt","$bkp_path/$name/") || die "cp srt1: $!\n";
-# 	copy("$srt","$bkp_srt_path/$name/") || die "cp srt2: $!\n";
-# 	copy("$srt","$srt.ssa") || die "cp srt3: $!\n";
-# 	$srt = "$srt.ssa";
 	$srt = convert_subtitle($srt, $movie, $w, $h);
 
 	push @mkv_opts, ("$srt");
@@ -182,8 +194,15 @@ sub work_on_file {
 	print "\tNo subtitles.\n";
 	die if $force_subtitles eq "yes";
     }
-
-    system("mencoder", "-idx", "-ovc", "copy", "-nosound", "$movie", "-o", "$dir/$name.video") == 0 or die "can't run mencoder:$?.\n";
+    if ($vcodec eq "ffh264" && $info->{ID_VIDEO_FORMAT} eq 'H264') {
+	system("ffmpeg", "-i", "$movie", "-vcodec", "copy", "$dir/$name.h264");
+	move ("$dir/$name.h264", "$dir/$name.video")
+    } else {
+	system("mencoder", "-idx", "-ovc", "copy", "-nosound", "$movie", "-o", "$dir/$name.video") == 0 or die "can't run mencoder:$?.\n";
+    }
+# unlink $movie;
+# move ("$movie", "/media/Video3/bkp/");
+exit 1;
     if ($acodec eq "faad" && $info->{ID_VIDEO_FORMAT} eq "MP4A"){
 	system("mplayer",  "-dumpaudio", "-dumpfile", "$dir/$name.audio", "$movie") == 0 or die "audio encoding failed: $!\n";
 # 	push @mkv_opts, ("$movie");
@@ -270,11 +289,7 @@ sub add_document {
     my $file = shift;
     print "Adding $file.\n";
     my ($name,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
-    opendir(DIR, "$dir") || die("Cannot open directory $dir: $!\n");
-    my @allfiles = grep { (!/^\.\.?$/) && -f "$dir/$_" } readdir(DIR);
-    closedir(DIR);
-    my %allfiles = map { $_ => 1 } @allfiles;
-    delete $allfiles{"$name$suffix"};
+# `ffmpeg -i "$file" -i "/media/Video3/__din nou/$name.audio" -map 0:0 -map 1:0 -acodec copy -vcodec copy "/media/Video1/Seriale/STNG/$name.mp4"`;
 
     $file =~ s/"/\\"/g;
     my $out = `mplayer -vo null -ao null -frames 0 -identify "$file" 2> /dev/null | grep ^ID_`;
@@ -288,9 +303,6 @@ sub add_document {
 	$info->{$tmp1[0]} = $tmp1[1];
     }
 
-#     my $subtitle = find_subtitles(\%allfiles, $name);
-#     die "$file:\n\t$dir$subtitle\n\t$info->{ID_FILE_SUB_FILENAME}\n" if exists $info->{ID_FILE_SUB_FILENAME} && "$dir$subtitle" ne $info->{ID_FILE_SUB_FILENAME} && $subtitle ne "" && $info->{ID_FILENAME} ne $file;
-# print Dumper($info);
     $movies->{$info->{ID_FILENAME}} = $info;
     work_on_file($info->{ID_FILENAME}, $info);
 }

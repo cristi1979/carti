@@ -22,3 +22,5 @@ edit /etc/selinux/config
 server:
 yum install perl-XML-LibXML csstidy tidy perl-HTML-Tidy ImageMagick
 
+http://www.howtoforge.com/mysql_database_replication
+http://megam.info/2009/10/19/load-balancing-mysql-part-i/
