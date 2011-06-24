@@ -25,9 +25,10 @@ sub get_file_md5 {
 
 sub add_file_to_zip {
     my ($zip_file, $add_file) = @_;
+    my ($name,$dir,$suffix) = fileparse($add_file, qr/\.[^.]*/);
     my $zip = Archive::Zip->new();
     $zip->read("$zip_file") == AZ_OK or die "read error\n";
-    $zip->addFile("$add_file");
+    $zip->addFile("$add_file", "$name$suffix") or die "Error adding file $name$suffix to zip";
     $zip->overwrite()     == AZ_OK or die "write error\n";
 }
 

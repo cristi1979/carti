@@ -110,7 +110,7 @@ sub wiki_tree_clean_css {
     }
 
     $css_txt .= Common::read_file("$_"), unlink "1".$_ foreach (@css_files);
-    $css_txt .= 'p,table {line-height: 1.2em; font-size: .9em; margin: .5em;text-align:justify;}';
+    $css_txt .= 'p,table {line-height: 1.2em; font-size: .91em; margin: .5em;text-align:justify;}';
 #     $css_txt .= "p,table {text-indent: 2.0em;text-align:justify}";
     $css_txt .= 'li,table.wikitable {margin: .5em;}';
     $css_txt .= 'h1,h2,h3,h4,h5,h6,h7,h8 {text-align:center;}';

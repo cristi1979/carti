@@ -112,7 +112,7 @@ sub make_wiki {
     my $image_files = ();
     my $no_links = 0;
 #     $no_links = 0 if $book eq "dudu -- Fracurile Negre III - 01 Manusa de otel";
-my $i = 1;
+# my $i = 1;
     my $html = Common::read_file("$html_file");
     ## this should be minus?
     $html =~ s/\x{1e}/-/gsi;
@@ -227,21 +227,6 @@ next if -d "$work_dir";
     }
 }
 
-sub set_font_path {
-    my $font_path = shift;
-    my $extra_css = "
-\@font-face{font-family:\"Bookman\";font-style:normal;font-weight:normal;src:url(res:$font_path)}
-\@font-face{font-family:\"Bookman\";font-style:normal;font-weight:bold;src:url(res:$font_path)}
-\@font-face{font-family:\"Bookman\";font-style:italic;font-weight:normal;src:url(res:$font_path)}
-\@font-face{font-family:\"Bookman\";font-style:italic;font-weight:bold;src:url(res:$font_path)}
-p,table{font-family:\"Bookman\"}
-li,table.wikitable {font-family:\"Bookman\";}
-h1,h2,h3,h4,h5,h6,h7,h8 {font-family:\"Bookman\";}
-";
-    $extra_css =~ s/\n+//gms;
-    return $extra_css;
-}
-
 sub wikiweb_to_epub {
     my ($book, $work_dir) = @_;
     my $link = $book;
@@ -258,6 +243,7 @@ sub wikiweb_to_epub {
     my $images;
     my $tree = HtmlClean::get_tree($html);
     $tree = HtmlClean::wiki_tree_clean_script($tree, $work_dir);
+    $tree = HtmlClean::doc_tree_clean_color($tree);
     $tree = HtmlClean::wiki_tree_clean_css($tree, $work_dir);
     $tree = HtmlClean::wiki_tree_clean_wiki($tree);
     ($tree, $images) = HtmlClean::wiki_tree_fix_links($tree, $wiki_site);
@@ -271,30 +257,52 @@ sub wikiweb_to_epub {
     my ($authors, $title) = $name =~ m/^(.*?)$url_sep(.*)$/;
     $authors =~ s/(\s*&\s*)/&/g;
 
+    my $epub_parameters = "--disable-font-rescaling --minimum-line-height=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --authors=\"$authors\" --title=\"$title\"";
+    my ($out_file, $in_file);
     ### normal epub
     print "Converting to epub.\n";
-    `$script_dir/tools/calibre/ebook-convert \"$html_file\" \"$dir/$name.epub\" --no-default-epub-cover --disable-font-rescaling --minimum-line-height=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --title=\"$title\" --authors=\"$authors\"`;
-#     ### epub with external font
-#     print "Converting to epub with external font.\n";
-#     my $font_css = set_font_path("///Data/fonts/$font");
-#     `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/fontextern_$name.epub\" --extra-css="$font_css"`;
-#     ### epub with embedded font
-#     print "Converting to epub with embedded font.\n";
-#     $font_css = set_font_path("$font");
-#     `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/fontintern_$name.epub\" --extra-css='$font_css'`;
-#     Common::add_file_to_zip("$dir/fontintern_$name.epub", "$script_dir/$font");
-#     ### epub with ascii chars
-#     print "Converting to ascii epub.\n";
-#     `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/ascii_$name.epub\" --asciiize`;
-#     ### normal mobi
-#     print "Converting to mobi.\n";
-#     `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/$name.mobi\"`;
-#     ### mobi with ascii chars
-#     print "Converting to ascii mobi.\n";
-#     `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/ascii_$name.mobi\" --asciiize`;
-#     ### normal fb2
-#     print "Converting to fb2.\n";
-#     `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/ascii_$name.fb2\"`;
+    $in_file = "$html_file";
+    $out_file = "$dir/normal/$name.epub";
+    Common::makedir("$dir/normal/");
+    `$script_dir/tools/calibre/ebook-convert \"$in_file\" \"$out_file\" --no-default-epub-cover $epub_parameters`;
+
+    $in_file = "$out_file";
+    ### epub with external font
+    print "Converting to epub with external font.\n";
+    $out_file = "$dir/external/$name.epub";
+    Common::makedir("$dir/external/");
+    `$script_dir/tools/calibre/ebook-convert \"$in_file\" \"$out_file\" --extra-css=\"$script_dir/tools/external_font.css\" --no-default-epub-cover $epub_parameters`;
+
+    ### epub with embedded font
+    print "Converting to epub with embedded font.\n";
+    $out_file = "$dir/internal/$name.epub";
+    Common::makedir("$dir/internal/");
+    `$script_dir/tools/calibre/ebook-convert \"$in_file\" \"$out_file\" --extra-css=\"$script_dir/tools/internal_font.css\" --no-default-epub-cover $epub_parameters`;
+    Common::add_file_to_zip("$out_file", "$script_dir/tools/$font");
+
+    ### epub with ascii chars
+    print "Converting to ascii epub.\n";
+    $out_file = Common::normalize_text("$dir/ascii/$name.epub");
+    Common::makedir("$dir/ascii/");
+    `$script_dir/tools/calibre/ebook-convert \"$in_file\" \"$out_file\" --asciiize --no-default-epub-cover $epub_parameters`;
+
+    ### normal mobi
+    print "Converting to mobi.\n";
+    $out_file = "$dir/mobi/$name.mobi";
+    Common::makedir("$dir/mobi/");
+    `$script_dir/tools/calibre/ebook-convert \"$in_file\" \"$out_file\" $epub_parameters`;
+
+    ### mobi with ascii chars
+    print "Converting to ascii mobi.\n";
+    $out_file = Common::normalize_text("$dir/ascii_mobi/$name.mobi");
+    Common::makedir("$dir/ascii_mobi/");
+    `$script_dir/tools/calibre/ebook-convert \"$in_file\" \"$out_file\" --asciiize $epub_parameters`;
+
+    ### normal fb2
+    print "Converting to fb2.\n";
+    $out_file = "$dir/fb2/$name.fb2";
+    Common::makedir("$dir/fb2/");
+    `$script_dir/tools/calibre/ebook-convert \"$in_file\" \"$out_file\" $epub_parameters`;
 }
 #  - --cover --series --series-index --tags=comma separated  --rating=between 1 and 5
 
@@ -343,7 +351,7 @@ $our_wiki = new WikiWork("$wiki_site", 'admin', 'qazwsx');
 # my $docs = $our_wiki->wiki_get_all_pages;
 foreach my $book (@{$our_wiki->wiki_get_all_pages}) {
 #     $book = Encode::encode('utf8', $book);
-# next if $book !~ m/Manusa de otel111/i;
+# next if $book !~ m/M.nu.a de o.el/i;
     my $work_dir = "$script_dir/$work_prefix/$book";
 next if -d "$work_dir";
     Common::makedir($work_dir);
