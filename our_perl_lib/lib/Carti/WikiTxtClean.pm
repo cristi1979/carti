@@ -110,7 +110,7 @@ sub wiki_fix_small_issues {
     ## remove empty headings
     $wiki =~ s/\n=+\n/\n/gm;;
     ## remove consecutive blank lines
-    $wiki =~ s/(\n){4,}/\n\n\n/gs;
+    $wiki =~ s/(\n){3,}/\n\n/gs;
     $wiki =~ s/^[ \t]+//mg;
     ## collapse spaces
     $wiki =~ s/[ \t]{2,}/ /mg;

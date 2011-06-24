@@ -40,7 +40,7 @@ my $wiki_site = "http://192.168.0.163/wiki";
 # my $wiki_site = "http://localhost/wiki";
 
 my $docs_prefix = shift;
-my $work_prefix = "work";
+my $work_prefix = "work_carti";
 
 my $colors = "yes";
 my $our_wiki;
@@ -51,6 +51,7 @@ my $font = "BookmanOS.ttf";
 sub generate_html_file {
     my $doc_file = shift;
     my ($name,$dir,$suffix) = fileparse($doc_file, qr/\.[^.]*/);
+#     return 0 if $suffix =~ m/^\.html?$/i;
     if ($suffix =~ m/^\.txt$/i) {
 	`iconv -f cp1250 -t utf-8 "$doc_file" > "$dir/utf_$name$suffix"`;
 	move("$dir/utf_$name$suffix", "$doc_file") || die "can't move file.\n";
@@ -111,7 +112,7 @@ sub make_wiki {
     my $image_files = ();
     my $no_links = 0;
 #     $no_links = 0 if $book eq "dudu -- Fracurile Negre III - 01 Manusa de otel";
-# my $i = 1;
+my $i = 1;
     my $html = Common::read_file("$html_file");
     ## this should be minus?
     $html =~ s/\x{1e}/-/gsi;
@@ -119,6 +120,7 @@ sub make_wiki {
     ### clean_html_from_doc
     my $tree = HtmlClean::get_tree($html);
 # Common::write_file("$work_dir/".$i++." html.html", HtmlClean::html_tidy($tree->as_HTML('<>&', "\t")));
+    $tree = HtmlClean::wiki_tree_clean_script($tree, "/dev/null");
     $tree = HtmlClean::doc_tree_clean_defs($tree);
     $tree = HtmlClean::doc_tree_remove_TOC($tree);
 # Common::write_file("$work_dir/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
@@ -199,12 +201,16 @@ sub work_docs {
     die "no author.\n" if $author =~ m/^\s*$/;
     foreach my $book (sort keys %$books) {
 	my $file = $books->{$book};
-# next if $file !~ m/Mircea Vulcanescu/i;
+# next if $file !~ m/Avatarul/i;
 # 	print "\n". '-'x10 ."\t".$crt++." out of $total\n$book\n";
 	my $title = "$author$url_sep$book";
 	$book = "$author$url_sep$book";
 	### import doc to wiki
 	my ($name,$dir,$ext) = fileparse(Common::normalize_text($file), qr/\.[^.]*/);
+# Common::makedir("/home/cristi/$dir");
+# copy("$file", "/home/cristi/$dir");
+# unlink $file;
+# next;
 	my $work_dir = "$script_dir/$work_prefix/$book";
 	my $working_file = "$work_dir/$name$ext";
 next if -d "$work_dir";
@@ -268,27 +274,27 @@ sub wikiweb_to_epub {
     ### normal epub
     print "Converting to epub.\n";
     `$script_dir/tools/calibre/ebook-convert \"$html_file\" \"$dir/$name.epub\" --no-default-epub-cover --disable-font-rescaling --minimum-line-height=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --title=\"$title\" --authors=\"$authors\"`;
-    ### epub with external font
-    print "Converting to epub with external font.\n";
-    my $font_css = set_font_path("///Data/fonts/$font");
-    `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/fontextern_$name.epub\" --extra-css="$font_css"`;
-    ### epub with embedded font
-    print "Converting to epub with embedded font.\n";
-    $font_css = set_font_path("$font");
-    `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/fontintern_$name.epub\" --extra-css='$font_css'`;
-    Common::add_file_to_zip("$dir/fontintern_$name.epub", "$script_dir/$font");
-    ### epub with ascii chars
-    print "Converting to ascii epub.\n";
-    `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/ascii_$name.epub\" --asciiize`;
-    ### normal mobi
-    print "Converting to mobi.\n";
-    `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/$name.mobi\"`;
-    ### mobi with ascii chars
-    print "Converting to ascii mobi.\n";
-    `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/ascii_$name.mobi\" --asciiize`;
-    ### normal fb2
-    print "Converting to fb2.\n";
-    `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/ascii_$name.fb2\"`;
+#     ### epub with external font
+#     print "Converting to epub with external font.\n";
+#     my $font_css = set_font_path("///Data/fonts/$font");
+#     `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/fontextern_$name.epub\" --extra-css="$font_css"`;
+#     ### epub with embedded font
+#     print "Converting to epub with embedded font.\n";
+#     $font_css = set_font_path("$font");
+#     `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/fontintern_$name.epub\" --extra-css='$font_css'`;
+#     Common::add_file_to_zip("$dir/fontintern_$name.epub", "$script_dir/$font");
+#     ### epub with ascii chars
+#     print "Converting to ascii epub.\n";
+#     `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/ascii_$name.epub\" --asciiize`;
+#     ### normal mobi
+#     print "Converting to mobi.\n";
+#     `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/$name.mobi\"`;
+#     ### mobi with ascii chars
+#     print "Converting to ascii mobi.\n";
+#     `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/ascii_$name.mobi\" --asciiize`;
+#     ### normal fb2
+#     print "Converting to fb2.\n";
+#     `$script_dir/tools/calibre/ebook-convert \"$dir/$name.epub\" \"$dir/ascii_$name.fb2\"`;
 }
 #  - --cover --series --series-index --tags=comma separated  --rating=between 1 and 5
 
@@ -304,17 +310,23 @@ sub import_documents {
     $docs_prefix = abs_path($docs_prefix);
     my $files_to_import = get_documents;
     foreach my $type (keys %$files_to_import) {
-	if ($type =~ m/\.txt?$/i) {
-# 	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) {
+	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i || $type =~ m/\.txt$/i) {
 # 	    $total += scalar (keys %{$files_to_import->{$type}->{$_}}) foreach (keys %{$files_to_import->{$type}});
 	    print "Start working for $type.\n";
 	    foreach my $author (sort keys %{$files_to_import->{$type}}) {
 		work_docs($author, $files_to_import->{$type}->{$author});
 	    }
-# 	} elsif ($type =~ m/\.rtf$/i) {
 	} elsif ($type =~ m/\.gif$/i || $type =~ m/\.jpg$/i) {
-# 	} elsif ($type =~ m/\.txt$/i) {
 	} elsif ($type =~ m/\.html?$/i) {
+# rm -rf ~/.libreoffice/
+# libreoffice -headless -invisible -nodefault -nologo -nofirststartwizard -norestore -convert-to swriter /dev/null
+# cp /home/cristi/programe/scripts/carti/tools/libreoffice/Standard/* ~/.libreoffice/3/user/basic/Standard/
+# libreoffice -headless -invisible -nocrashreport -nodefault -nologo -nofirststartwizard -norestore "macro:///Standard.Module1.embedImagesInWriter(/home/cristi/programe/scripts/carti/qq/index.html)"
+# libreoffice -infilter="HTML (StarWriter)" -convert-to "ODF Text Document" ./q/Poul\ Anderson/index.html
+# http://user.services.openoffice.org/en/forum/viewtopic.php?f=20&t=23909
+# my $tree = HtmlClean::get_tree($html);
+# $tree = HtmlClean::wiki_tree_clean_script($tree, "/dev/null");
+# "C:\Program Files\OpenOffice.org1.1.4\program\soffice.exe" "macro:///Standard.Module1.Test(C:\Documents and Settings\dbrewer\Desktop\Test\test.sxw)" 
 	} elsif ($type =~ m/\.pdf$/i) {
 	} elsif ($type =~ m/\.epub$/i) {
 	} elsif ($type =~ m/\.zip$/i) {
@@ -325,13 +337,13 @@ sub import_documents {
     }
 }
 
-import_documents();
-exit 1;
+# import_documents();
+# exit 1;
 $our_wiki = new WikiWork("$wiki_site", 'admin', 'qazwsx');
 # my $docs = $our_wiki->wiki_get_all_pages;
 foreach my $book (@{$our_wiki->wiki_get_all_pages}) {
 #     $book = Encode::encode('utf8', $book);
-next if $book !~ m/Manusa de otel/i;
+# next if $book !~ m/Manusa de otel111/i;
     my $work_dir = "$script_dir/$work_prefix/$book";
 next if -d "$work_dir";
     Common::makedir($work_dir);

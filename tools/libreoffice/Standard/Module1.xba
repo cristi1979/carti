@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
+<script:module xmlns:script="http://openoffice.org/2000/script" script:name="ConvertesteCarti" script:language="StarBasic">Sub embedImagesInWriter(cFile)
+    cURL = ConvertToURL( cFile )
+    GlobalScope.BasicLibraries.LoadLibrary(&quot;Tools&quot;)
+    oDoc = StarDesktop.loadComponentFromURL(cURL, &quot;_blank&quot;, 0, (_
+	    Array(MakePropertyValue(&quot;FilterName&quot;, &quot;HTML (StarWriter)&quot;) ,MakePropertyValue( &quot;Hidden&quot;, True ),)) 
+    sFile = GetFileNameWithoutExtension(oDoc.url) + &quot;.odt&quot;
+    sURL = ConvertToURL( sFile )
+    allImages = oDoc.GraphicObjects
+    for x = 0 to allImages.Count -1
+      imageX = allImages.getByIndex(x)
+      if InStr(1, imageX.GraphicURL, &quot;vnd.sun.star.GraphicObject:&quot;, 0) = 0  then
+        imageX.Graphic = getGraphicFromURL(imageX.GraphicURL)
+      end if
+    next
+    
+    oDoc.storeToURL( sURL, Array(_
+	    MakePropertyValue( &quot;FilterName&quot;, &quot;writer8&quot; ),)
+
+    oDoc.close( True )
+End Sub
+
+Function getGraphicFromURL( sURL as String) as com.sun.star.graphic.XGraphic
+    On Error Resume Next
+    Dim oGraphicProvider as Object
+    oGraphicProvider = createUnoservice(&quot;com.sun.star.graphic.GraphicProvider&quot;)
+           
+    Dim aMediaProperties(0) as New com.sun.star.beans.PropertyValue
+    aMediaProperties(0).Name = &quot;URL&quot;
+    aMediaProperties(0).Value = sURL
+
+    getGraphicFromURL = oGraphicProvider.queryGraphic(aMediaProperties)
+End Function
+
+Function MakePropertyValue( Optional cName As String, Optional uValue ) _
+   As com.sun.star.beans.PropertyValue
+   Dim oPropertyValue As New com.sun.star.beans.PropertyValue
+   If Not IsMissing( cName ) Then
+      oPropertyValue.Name = cName
+   EndIf
+   If Not IsMissing( uValue ) Then
+      oPropertyValue.Value = uValue
+   EndIf
+   MakePropertyValue() = oPropertyValue
+End Function
+
+</script:module>
