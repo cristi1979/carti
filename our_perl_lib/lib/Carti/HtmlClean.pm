@@ -336,8 +336,8 @@ sub wiki_tree_fix_links {
 	} elsif ($tag eq "a") {
 	    if ($link =~ m/^$wiki_site/) {
 		$element->replace_with_content;
-	    } elsif ($link =~ m/(#.*)?$/) {
-		my $orig = $1;
+	    } elsif ($link =~ m/#(.*)?$/) {
+		my $orig = "#$1";
 		my $new_name = $orig;
 		$new_name =~ s/:/_/gi;
 		$orig =~ s/^#//;
@@ -349,7 +349,7 @@ sub wiki_tree_fix_links {
 		die "check name $name.\n" if defined $name;
 		$element->attr($attr, "$new_name");
 	    } else {
-		die "Hey, there's tag $tag that links to ", $link, ", in its $attr attribute.\n";
+		print "Hey, there's tag $tag that links to ", $link, ", in its $attr attribute.\n";
 	    }
 	} else {
 	    die "Hey, there's tag $tag that links to ", $link, ", in its $attr attribute.\n";
