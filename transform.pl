@@ -256,13 +256,9 @@ sub import_wiki {
 	}
     }
     my $nr_chars = length($wiki);
-    if ($nr_chars < 10000) {
-	$wiki .= "[[Category:Carti scurte]]\n";
-    } elsif ($nr_chars > 9000 && $nr_chars < 50000) {
-	$wiki .= "[[Category:Carti medii]]\n";
-    } else {
-	$wiki .= "[[Category:Carti lungi]]\n";
-    }
+    $wiki .= "[[Category:Carti scurte]]\n" if ($nr_chars < 20000);
+    $wiki .= "[[Category:Carti medii]]\n" if ($nr_chars > 19000 && $nr_chars < 500000);
+    $wiki .= "[[Category:Carti lungi]]\n" if ($nr_chars > 450000);
     $wiki .= "[[Category:$category_evaluare]]\n";
     $our_wiki->wiki_delete_page("$title") if $our_wiki->wiki_exists_page("$title");
     $our_wiki->wiki_edit_page("$title", $wiki);
