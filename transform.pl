@@ -27,7 +27,7 @@ use Encode;
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 use HTML::Tidy;
-# use HTML::TextToHTML;
+use URI::Escape;
 
 use Carti::WikiWork;
 use Carti::HtmlClean;
@@ -38,15 +38,35 @@ use Carti::WikiTxtClean;
 # my $wiki_site = "http://localhost:2900/wiki";
 my $wiki_site = "http://192.168.0.163/wiki";
 # my $wiki_site = "http://localhost/wiki";
+my $wiki_site_download_dir = "$wiki_site/fisiere_originale";
+my $local_download_dir = "work_fisiere_originale";
+my $category_evaluare = "Evaluare";
 
 my $docs_prefix = shift;
-my $work_prefix = "work_carti";
+# my $work_prefix = "work_epub";
+my $work_prefix = "work_wiki";
+my $control_file = "doc_info_file.txt";
+Common::makedir("$script_dir/$local_download_dir");
 
 my $colors = "yes";
 my $our_wiki;
 my $debug = 1;
 my $url_sep = " -- ";
 my $font = "BookmanOS.ttf";
+
+sub get_authors {
+    my $author = shift;
+    my $authors;
+    foreach my $tmp (split "&", $author) {
+	$tmp =~s/(^\s+|\s+$)//g;
+	my @tmp1 = split /\s/, $tmp;
+	my $tmp1 = (pop @tmp1).", ". join " ", @tmp1;
+	$tmp1 =~s/(^\s+|\s+$)//g;
+	$authors->{$tmp} = "nume prenume";
+	$authors->{$tmp1} = "prenume, nume";
+    }
+    return $authors;
+}
 
 sub generate_html_file {
     my $doc_file = shift;
@@ -85,16 +105,51 @@ sub generate_html_file {
     return 0;
 }
 
+sub get_existing_documents {
+    our $files_already_imported = {};
+    my $work_dir = abs_path("$script_dir/$work_prefix/");
+    opendir(DIR, "$work_dir") || die("Cannot open directory $work_dir.\n");
+    my @alldirs = grep { (!/^\.\.?$/) && -d "$work_dir/$_" } readdir(DIR);
+    closedir(DIR);
+    foreach my $dir (sort @alldirs) {
+	$dir = "$work_dir/$dir";
+	if (! -f "$dir/$control_file"){
+	    print "Remove wrong dir $dir.\n";
+	    remove_tree("$dir") || die "Can't remove dir $dir: $!.\n";
+	    next;
+	}
+	open(FILE, "<:encoding(UTF-8)", "$dir/$control_file");
+	my @info_text = <FILE>;
+	close FILE;
+	chomp(@info_text);
+	if ( @info_text != 2 ) {
+	    print "\tFile $dir/$control_file does not have the correct number of entries.\n";
+	    remove_tree("$dir") || die "Can't remove dir $dir: $!.\n";
+	    next;
+	}
+	my $title = $info_text[0]; $title =~ s/(.*?)=\s*//;
+	my $md5 = $info_text[1]; $md5 =~ s/(.*?)=\s*//;
+	$files_already_imported->{$title} = $md5;
+    }
+    return $files_already_imported;
+}
+
 sub get_documents {
     our $files_to_import = {};
     sub add_document {
 	my $file = shift;
 	$file = abs_path($file);
-	my ($name,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
+	my ($book,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
 	my $auth = $dir;
 	$auth =~ s/^$docs_prefix\/([^\/]*).*$/$1/;
-	$auth = "Autor necunoscut" if $auth =~ m/^\s*$/;
-	$files_to_import->{"$suffix"}->{$auth}->{$name} = $file;
+	die "Autor necunoscut" if $auth =~ m/^\s*$/;
+
+	$files_to_import->{"$auth$url_sep$book"}->{"type"} = "$suffix";
+	$files_to_import->{"$auth$url_sep$book"}->{"file"} = "$file";
+	$files_to_import->{"$auth$url_sep$book"}->{"title"} = "$auth$url_sep$book";
+# 	$files_to_import->{"$auth$url_sep$book"}->{"md5"} = "1";
+	$files_to_import->{"$auth$url_sep$book"}->{"md5"} = Common::get_file_md5($file);
+	$files_to_import->{"$auth$url_sep$book"}->{"auth"} = get_authors($auth);
     }
 
     find ({wanted => sub { add_document ($File::Find::name) if -f },},"$docs_prefix") if -d "$docs_prefix";
@@ -184,47 +239,58 @@ sub import_wiki {
 # Common::write_file("$work_dir/$title 3.wiki", Encode::decode('utf8', $wiki));
 #     $wiki = WikiTxtClean::wiki_guess_headings($wiki);
     $wiki .= "\n\n----\n=Note de subsol=\n\n<references />\n\n";
-    foreach my $tmp (split "&", $author) {
-	$tmp =~s/(^\s+|\s+$)//g;
-	$wiki .= "[[Category:$tmp]]\n";
-	$our_wiki->wiki_edit_page("Category:$tmp", "[[Category:Autori]]\n----") if ! $our_wiki->wiki_exists_page("Category:$tmp");
-    }
     ### wikitext_to_wikiweb
     $our_wiki->wiki_upload_file($image_files);
     unlink "$_" foreach (@$image_files); #, "align", "right"
+    ### adauga categoriile
+    foreach (sort keys %$author) {
+	$wiki .= "[[Category:$_]]\n";
+	if ($author->{$_} eq "nume prenume") {# && ! $our_wiki->wiki_exists_page("Category:$_")
+	    $our_wiki->wiki_edit_page("Category:$_", "[[Category:Autori sortati alfabetic]]\n----");
+	}
+	if ($author->{$_} eq "prenume, nume") {
+	    $our_wiki->wiki_edit_page("Category:$_", "[[Category:Autori sortati]]\n----");
+	}
+    }
+    $wiki .= "[[Category:$category_evaluare]]\n";
     $our_wiki->wiki_delete_page("$title") if $our_wiki->wiki_exists_page("$title");
     $our_wiki->wiki_edit_page("$title", $wiki);
+    return $wiki;
 }
 
 sub work_docs {
-    my ($author, $books) = @_;
-    die "no author.\n" if $author =~ m/^\s*$/;
-    foreach my $book (sort keys %$books) {
-	my $file = $books->{$book};
-# next if $file !~ m/Avatarul/i;
-# 	print "\n". '-'x10 ."\t".$crt++." out of $total\n$book\n";
-	my $title = "$author$url_sep$book";
-	$book = "$author$url_sep$book";
-	### import doc to wiki
-	my ($name,$dir,$ext) = fileparse(Common::normalize_text($file), qr/\.[^.]*/);
+    my $book = shift;
+    my ($author, $file, $title) =($book->{"auth"}, $book->{"file"}, $book->{"title"});
+# return if $file !~ m/Avatarul/i;
+    ### import doc to wiki
+    my ($name,$dir,$ext) = fileparse(Common::normalize_text($file), qr/\.[^.]*/);
+# ($name,$dir,$ext) = fileparse($file, qr/\.[^.]*/);
 # Common::makedir("/home/cristi/$dir");
-# copy("$file", "/home/cristi/$dir");
-# unlink $file;
-# next;
-	my $work_dir = "$script_dir/$work_prefix/$book";
-	my $working_file = "$work_dir/$name$ext";
-next if -d "$work_dir";
-# 	remove_tree("$work_dir") || die "Can't remove dir $work_dir: $!.\n" if -d "$work_dir";
-	Common::makedir($work_dir);
-	copy("$file", $working_file) or die "Copy failed $working_file: $!\n";
-	my $res = generate_html_file("$working_file");
-	if ($res || ! -s "$work_dir/$name.html") {print "Can't generate html.\n";next;}
-	my ($wiki_text, $image_files) = make_wiki("$work_dir/$name.html", $work_dir);
-	import_wiki($wiki_text, $title, $image_files, $work_dir, $author);
-	unlink "$working_file" || die "Can't remove file $file:$!.\n";
-# 	rmdir "$work_dir" || print "Can't remove dir $work_dir:$!.\n";
-# exit 1;
-    }
+# copy("$file", "/home/cristi/$dir/");
+# # unlink $file;
+# return;
+    my $work_dir = "$script_dir/$work_prefix/$title";
+    my $working_file = "$work_dir/$name$ext";
+    remove_tree("$work_dir") || die "Can't remove dir $work_dir: $!.\n" if -d "$work_dir";
+    Common::makedir($work_dir);
+    copy("$file", $working_file) or die "Copy failed $working_file: $!\n";
+    my $res = generate_html_file("$working_file");
+    if ($res || ! -s "$work_dir/$name.html") {print "Can't generate html.\n";next;}
+    my ($wiki_text, $image_files) = make_wiki("$work_dir/$name.html", $work_dir);
+    my $zip_file = "$work_dir/$title.zip";
+    Common::add_file_to_zip("$zip_file", "$file");
+    move("$zip_file", "$script_dir/$local_download_dir") or die "can't move $zip_file: $!\n";
+    $wiki_text = "<center>Fisierul original poate fi gasit [$wiki_site_download_dir/".uri_escape($title).".zip aici]</center>\n----\n\n\n".$wiki_text;
+    import_wiki($wiki_text, $title, $image_files, $work_dir, $author);
+    Common::write_file("$work_dir/$title.wiki", $wiki_text);
+    Common::write_file("$work_dir/$control_file", "file=$title\nmd5=".$book->{"md5"});
+    unlink "$working_file" || die "Can't remove file $file:$!.\n";
+    my @files = <"$work_dir/*">;
+    my $files_hash = {};
+    $files_hash->{$_} = 1 foreach (@files);
+    delete $files_hash->{"$work_dir/$title.wiki"};
+    delete $files_hash->{"$work_dir/$control_file"};
+    die "Files still exist in $work_dir:\n".Dumper($files_hash) if scalar (keys %$files_hash) > 0;
 }
 
 sub wikiweb_to_epub {
@@ -323,14 +389,26 @@ sub wikiweb_to_epub {
 
 sub import_documents {
     $docs_prefix = abs_path($docs_prefix);
+    my $files_already_imported = get_existing_documents;
+# print Dumper($files_already_imported);exit 1;
     my $files_to_import = get_documents;
-    foreach my $type (keys %$files_to_import) {
+    my @arr1 = (keys %$files_already_imported);
+    my @arr2 = (keys %$files_to_import);
+    my ($only_in1, $only_in2, $common) = Common::array_diff(\@arr1, \@arr2);
+    foreach (@$common){
+	if ($files_already_imported->{$_} eq $files_to_import->{$_}->{"md5"}){
+	    delete $files_already_imported->{$_};
+	    delete $files_to_import->{$_}->{"md5"};
+	}
+    }
+# print Dumper($only_in1, $common, $only_in2);exit 1;
+    my $total = scalar (keys %$files_to_import);
+    my $crt = 1;
+    foreach my $file (@$only_in2) {
+	my $type = $files_to_import->{$file}->{"type"};
 	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i || $type =~ m/\.txt$/i) {
-# 	    $total += scalar (keys %{$files_to_import->{$type}->{$_}}) foreach (keys %{$files_to_import->{$type}});
-	    print "Start working for $type.\n";
-	    foreach my $author (sort keys %{$files_to_import->{$type}}) {
-		work_docs($author, $files_to_import->{$type}->{$author});
-	    }
+	    print "$type: start working for book $file: $crt out of $total.\n";
+	    work_docs($files_to_import->{$file});
 	} elsif ($type =~ m/\.gif$/i || $type =~ m/\.jpg$/i) {
 	} elsif ($type =~ m/\.html?$/i) {
 # rm -rf ~/.libreoffice/
@@ -349,18 +427,22 @@ sub import_documents {
 	} else {
 	    print Dumper($files_to_import->{$type})."\nUnknown file type: $type.\n";
 	}
+	$crt++;
     }
 }
 
-# import_documents();
-# exit 1;
+import_documents();
+exit 1;
 $our_wiki = new WikiWork("$wiki_site", 'admin', 'qazwsx');
 # my $docs = $our_wiki->wiki_get_all_pages;
-foreach my $book (@{$our_wiki->wiki_get_all_pages}) {
+foreach my $book (sort @{$our_wiki->wiki_get_all_pages}) {
 #     $book = Encode::encode('utf8', $book);
-# next if $book !~ m/M.nu.a de o.el/i;
+# next if lc($book) lt "t";
     my $work_dir = "$script_dir/$work_prefix/$book";
 next if -d "$work_dir";
+    print "Start working for ".Encode::encode('utf8', $book).".\n";
     Common::makedir($work_dir);
     wikiweb_to_epub($book, $work_dir);
 }
+
+# find ./work_carti/ -iname \*.epub -print0 | grep -zZ \/ascii\/ | xargs -0 -I {} cp "{}" ./epub_ascii

@@ -110,7 +110,7 @@ sub wiki_fix_small_issues {
     ## remove empty headings
     $wiki =~ s/\n=+\n/\n/gm;;
     ## remove consecutive blank lines
-    $wiki =~ s/(\n){3,}/\n\n/gs;
+    $wiki =~ s/(\n){4,}/\n\n\n/gs;
     $wiki =~ s/^[ \t]+//mg;
     ## collapse spaces
     $wiki =~ s/[ \t]{2,}/ /mg;
@@ -131,7 +131,9 @@ sub wiki_fix_small_issues {
     $wiki =~ s/^;/\n<nowiki>;<\/nowiki>/gm;
     ## dashes, lists
     $wiki =~ s/^\s*\*\s*$//gm;
-    $wiki =~ s/^\s*((<font color="#[0-9]{6}">)?)\s*(-|\x{e2}\x{80}\x{93})\s*/\n$1\x{e2}\x{80}\x{94} /gm;
+    $wiki =~ s/^\s*((<font color="#[0-9]{6}">)?)\s*(\x{e2}\x{80}\x{93})\s*/\n$1\x{e2}\x{80}\x{94} /gm;
+    $wiki =~ s/^\s*((<font color="#[0-9]{6}">)?)\s*(-{1,2})\s*([^-])/\n$1\x{e2}\x{80}\x{94} $4/gm;
+    ## some bokks have dialogs as lists
     $wiki =~ s/^\s*((<font color="#[0-9]{6}">)?)\s*\*\s*/\n$1\x{e2}\x{80}\x{94} /gm;
 
     return $wiki;

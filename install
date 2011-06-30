@@ -24,3 +24,34 @@ yum install perl-XML-LibXML csstidy tidy perl-HTML-Tidy ImageMagick
 
 http://www.howtoforge.com/mysql_database_replication
 http://megam.info/2009/10/19/load-balancing-mysql-part-i/
+
+
+sterge artivle feedback:
+
+drop table article_feedback;
+drop table article_feedback_pages;
+drop table article_feedback_properties;
+drop table article_feedback_ratings;
+drop table article_feedback_revisions;
+drop table article_feedback_stats;
+drop table article_feedback_stats_types;
+
+
+
+/var/www/html/wiki/extensions/ArticleFeedback/modules/ext.articleFeedback/ext.articleFeedback.css
+
+
+.articleFeedback-ratings div[rel="trustworthy"],
+.articleFeedback-ratings div[rel="wellwritten"],
+.articleFeedback-helpimprove-note,
+.articleFeedback-expertise-options .articleFeedback-helpimprove-email,
+.articleFeedback-expertise-options label,
+.articleFeedback-expertise-options input,
+.articleFeedback-expertise-options,
+.articleFeedback-expertise label,
+.articleFeedback-expertise input,
+.articleFeedback-expertise,
+.articleFeedback-expertise-disabled,
+.articleFeedback-helpimprove-disabled {
+    display: none;
+    }
