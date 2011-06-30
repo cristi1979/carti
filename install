@@ -55,3 +55,24 @@ drop table article_feedback_stats_types;
 .articleFeedback-helpimprove-disabled {
     display: none;
     }
+
+
+MediaWiki:Sidebar
+
+* Categorii
+** Categorie:Autori sortati|Autori sortati dupa prenume, nume
+** Categorie:Autori sortati alfabetic|Autori sortati dupa nume prenume
+* Deschide o carte aleatoriu
+** Random carti|Orice carte
+** Random carti scurte|O carte scurta
+** Random carti medii|O carte medie
+** Random carti lungi|O carte lunga
+
+Random carti
+__HIDDENCAT__ Categorie:Carti_medii Categorie:Carti lungi Categorie:Carti scurte  Categorie:Evaluare
+<DPL>
+  category = Evaluare
+  format   = ,\n* [[%PAGE%|%TITLE%]],,
+  include=*
+  randomcount=1
+</DPL>

@@ -256,6 +256,8 @@ sub import_wiki {
 	}
     }
     my $nr_chars = length($wiki);
+    $wiki .= "\n[{{fullurl:Template:Taguri $title|action=edit}} Adauga/modifica taguri]\n\n";
+#     $our_wiki->wiki_edit_page("Template:Taguri $title", "----");
     $wiki .= "[[Category:Carti scurte]]\n" if ($nr_chars < 20000);
     $wiki .= "[[Category:Carti medii]]\n" if ($nr_chars > 19000 && $nr_chars < 500000);
     $wiki .= "[[Category:Carti lungi]]\n" if ($nr_chars > 450000);
