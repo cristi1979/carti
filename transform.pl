@@ -38,7 +38,7 @@ use Carti::WikiTxtClean;
 # my $wiki_site = "http://localhost:2900/wiki";
 my $wiki_site = "http://192.168.0.163/wiki";
 # my $wiki_site = "http://localhost/wiki";
-my $wiki_site_download_dir = "$wiki_site/fisiere_originale";
+my $wiki_site_download_dir = "http://radarada.no-ip.org/wiki/fisiere_originale";
 my $local_download_dir = "work_fisiere_originale";
 my $category_evaluare = "Evaluare";
 
@@ -107,7 +107,10 @@ sub generate_html_file {
 
 sub get_existing_documents {
     our $files_already_imported = {};
-    my $work_dir = abs_path("$script_dir/$work_prefix/");
+    my $work_dir = "$script_dir/$work_prefix/";
+    die "Working dir $work_dir is a file.\n" if -f $work_dir;
+    return if ! -d $work_dir;
+    $work_dir = abs_path("$script_dir/$work_prefix/");
     opendir(DIR, "$work_dir") || die("Cannot open directory $work_dir.\n");
     my @alldirs = grep { (!/^\.\.?$/) && -d "$work_dir/$_" } readdir(DIR);
     closedir(DIR);
@@ -251,6 +254,14 @@ sub import_wiki {
 	if ($author->{$_} eq "prenume, nume") {
 	    $our_wiki->wiki_edit_page("Category:$_", "[[Category:Autori sortati]]\n----");
 	}
+    }
+    my $nr_chars = length($wiki);
+    if ($nr_chars < 10000) {
+	$wiki .= "[[Category:Carti scurte]]\n";
+    } elsif ($nr_chars > 9000 && $nr_chars < 50000) {
+	$wiki .= "[[Category:Carti medii]]\n";
+    } else {
+	$wiki .= "[[Category:Carti lungi]]\n";
     }
     $wiki .= "[[Category:$category_evaluare]]\n";
     $our_wiki->wiki_delete_page("$title") if $our_wiki->wiki_exists_page("$title");
