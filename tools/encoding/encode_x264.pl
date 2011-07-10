@@ -64,6 +64,16 @@ sub work_on_subtitle {
     my ($movie, $info) = @_;
     my ($w, $h) = get_video_size($info);
 
+    my $sub_file_name = $info->{ID_FILE_SUB_FILENAME} if exists $info->{ID_FILE_SUB_FILENAME};
+    my $tmp = $sub_file_name;
+    $tmp =~ s/(,|")//mgs;
+    return "" if ! -f "$sub_file_name";
+    if ($tmp ne $movie) {
+	move("$sub_file_name","$tmp") || die "mv srt 2: $!\n";
+	$sub_file_name = $tmp;
+    }
+    copy("$sub_file_name","$bkp_path/$name/") || die "cp srt1: $!\n";
+
     my ($name,$dir,$suffix) = fileparse($sub_file_name, qr/\.[^.]*/);
 
     my ($ass_file_name, $original_file_name) = ("$dir$name.ass", "$dir$name.original$suffix");
@@ -73,7 +83,8 @@ sub work_on_subtitle {
     open(MYINPUTFILE, "<$sub_file_name"); # open for input
     my(@lines) = <MYINPUTFILE>; # read file into list
     close(MYINPUTFILE);
-    my $tmp = join "", @lines;
+    
+    $tmp = join "", @lines;
     Encode::from_to($tmp, "cp1250", "utf8") if (get_encoding($tmp) ne "utf8" );
     open MYFILE, ">$utf8_file_name";
     print MYFILE $tmp;
@@ -158,17 +169,12 @@ sub work_on_video {
 
 sub work_on_file {
     my ($movie, $info) = @_;
-    my $srt = "";
-    $srt = $info->{ID_FILE_SUB_FILENAME} if exists $info->{ID_FILE_SUB_FILENAME};
-    my ($tmp1, $tmp2) = ($movie, $srt);
-    $tmp1 =~ s/(,|")//mgs;
-    $tmp2 =~ s/(,|")//mgs;
-    if ($tmp1 ne $movie) {
-	die "Cleaned filename already exists: $tmp1.\n" if -f $tmp1;
-	move("$movie","$tmp1") || die "mv movie: $!\n";
-	if (-f "$srt") {move("$srt","$tmp2") || die "mv srt 2: $!\n";}
-	$movie = $tmp1;
-	$srt = $tmp2;
+    my $tmp = $movie;
+    $tmp =~ s/(,|")//mgs;
+    if ($tmp ne $movie) {
+	die "Cleaned filename already exists: $tmp.\n" if -f $tmp;
+	move("$movie","$tmp") || die "mv movie: $!\n";
+	$movie = $tmp;
     }
     print "\tStart working.\n";
     my @extra_opts = ();
@@ -184,16 +190,16 @@ sub work_on_file {
 
     my @mkv_opts = ("mkvmerge", "-o", "$dir/coco.mkv");
 
+    $srt = work_on_subtitle($movie, $info);
     if ($srt ne "") {
-	copy("$srt","$bkp_path/$name/") || die "cp srt1: $!\n";
-	$srt = convert_subtitle($srt, $movie, $w, $h);
-
 	push @mkv_opts, ("$srt");
 	push @extra_opts, ("-s", "1", "--subtitle-burn");
     } else {
 	print "\tNo subtitles.\n";
 	die if $force_subtitles eq "yes";
     }
+
+
     if ($vcodec eq "ffh264" && $info->{ID_VIDEO_FORMAT} eq 'H264') {
 	system("ffmpeg", "-i", "$movie", "-vcodec", "copy", "$dir/$name.h264");
 	move ("$dir/$name.h264", "$dir/$name.video")
@@ -202,7 +208,7 @@ sub work_on_file {
     }
 # unlink $movie;
 # move ("$movie", "/media/Video3/bkp/");
-exit 1;
+
     if ($acodec eq "faad" && $info->{ID_VIDEO_FORMAT} eq "MP4A"){
 	system("mplayer",  "-dumpaudio", "-dumpfile", "$dir/$name.audio", "$movie") == 0 or die "audio encoding failed: $!\n";
 # 	push @mkv_opts, ("$movie");

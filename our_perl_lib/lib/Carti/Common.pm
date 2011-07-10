@@ -12,6 +12,24 @@ use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 use Unicode::Normalize 'NFD','NFC','NFKD','NFKC';
 use Archive::Zip qw( :ERROR_CODES );
+use XML::Simple;
+
+sub xmlfile_to_hash {
+    my $file = shift;
+    my $xml = new XML::Simple;
+    return $xml->XMLin("$file");
+}
+
+sub hash_to_xmlfile {
+    my ($hash, $name, $root_name) = @_;
+    $root_name = "out" if ! defined $root_name;
+    my $xs = new XML::Simple();
+    my $xml = $xs->XMLout($hash,
+		    NoAttr => 1,
+		    RootName=>$root_name,
+		    OutputFile => $name
+		    );
+}
 
 sub get_file_md5 {
     my $doc_file = shift;
@@ -19,14 +37,13 @@ sub get_file_md5 {
     binmode(FILE);
     my $doc_md5 = Digest::MD5->new->addfile(*FILE)->hexdigest;
     close(FILE);
-#     my $doc_md5 = "123";
     return $doc_md5;
 }
 
 sub add_file_to_zip {
     my ($zip_file, $add_file) = @_;
     my ($name,$dir,$suffix) = fileparse($add_file, qr/\.[^.]*/);
-    
+
     my $zip = Archive::Zip->new();
     if (-f $zip_file){$zip->read("$zip_file") == AZ_OK or die "read error\n"};
     $zip->addFile("$add_file", "$name$suffix") or die "Error adding file $name$suffix to zip";

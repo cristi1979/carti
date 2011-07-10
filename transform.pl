@@ -45,6 +45,7 @@ my $category_evaluare = "Evaluare";
 my $docs_prefix = shift;
 # my $work_prefix = "work_epub";
 my $work_prefix = "work_wiki";
+my $bad_file = "bad_files";
 my $control_file = "doc_info_file.txt";
 Common::makedir("$script_dir/$local_download_dir");
 
@@ -53,7 +54,26 @@ my $our_wiki;
 my $debug = 1;
 my $url_sep = " -- ";
 my $font = "BookmanOS.ttf";
+my $bad_files_md5 = {};
+my $duplicate_files = {};
 
+sub remove_duplicates {
+    $bad_files_md5 = Common::xmlfile_to_hash($bad_file) if -f $bad_files_md5;
+    sub add_document_bad {
+	my $file = shift;
+	$file = abs_path($file);
+	my $md5 = "md5_".Common::get_file_md5($file);
+	if ( defined $bad_files_md5->{$md5} ){
+	    $duplicate_files->{"$file"} = 1 if $file ge $bad_files_md5->{$md5};
+# 	    print "duplicate: \n".$file." and \n".$bad_files_md5->{$md5}."\n";
+	} else {
+	    $bad_files_md5->{$md5} = "$file";
+	}
+    }
+    find ({wanted => sub { add_document_bad ($File::Find::name) if -f },},"$docs_prefix") if -d "$docs_prefix";
+    Common::hash_to_xmlfile($bad_files_md5, "$docs_prefix/$bad_file");
+    print Dumper($duplicate_files);
+}
 sub get_authors {
     my $author = shift;
     my $authors;
@@ -372,7 +392,7 @@ sub wikiweb_to_epub {
 #     Common::makedir("$dir/mobi/");
 #     $output = `$script_dir/tools/calibre/ebook-convert \"$in_file\" \"$out_file\" $epub_parameters`;
 #     die "file $out_file not created.\n" if ! -s $out_file;
-# 
+#
 #     ### mobi with ascii chars
 #     print "Converting to ascii mobi.\n";
 #     $out_file = Common::normalize_text("$dir/ascii_mobi/$name.mobi");
@@ -428,7 +448,7 @@ sub import_documents {
 # http://user.services.openoffice.org/en/forum/viewtopic.php?f=20&t=23909
 # my $tree = HtmlClean::get_tree($html);
 # $tree = HtmlClean::wiki_tree_clean_script($tree, "/dev/null");
-# "C:\Program Files\OpenOffice.org1.1.4\program\soffice.exe" "macro:///Standard.Module1.Test(C:\Documents and Settings\dbrewer\Desktop\Test\test.sxw)" 
+# "C:\Program Files\OpenOffice.org1.1.4\program\soffice.exe" "macro:///Standard.Module1.Test(C:\Documents and Settings\dbrewer\Desktop\Test\test.sxw)"
 	} elsif ($type =~ m/\.pdf$/i) {
 	} elsif ($type =~ m/\.epub$/i) {
 	} elsif ($type =~ m/\.zip$/i) {
@@ -440,7 +460,9 @@ sub import_documents {
     }
 }
 
-import_documents();
+remove_duplicates();
+
+# import_documents();
 exit 1;
 $our_wiki = new WikiWork("$wiki_site", 'admin', 'qazwsx');
 # my $docs = $our_wiki->wiki_get_all_pages;
