@@ -58,7 +58,9 @@ my $bad_files_md5 = {};
 my $duplicate_files = {};
 
 sub remove_duplicates {
-    $bad_files_md5 = Common::xmlfile_to_hash($bad_file) if -f $bad_files_md5;
+    my $bad_files = "$script_dir/$bad_file";
+    $bad_files_md5 = Common::xmlfile_to_hash("$bad_files") if -f "$bad_files";
+
     sub add_document_bad {
 	my $file = shift;
 	$file = abs_path($file);
@@ -71,7 +73,7 @@ sub remove_duplicates {
 	}
     }
     find ({wanted => sub { add_document_bad ($File::Find::name) if -f },},"$docs_prefix") if -d "$docs_prefix";
-    Common::hash_to_xmlfile($bad_files_md5, "$docs_prefix/$bad_file");
+    Common::hash_to_xmlfile($bad_files_md5, "$bad_files");
     print Dumper($duplicate_files);
 }
 sub get_authors {
