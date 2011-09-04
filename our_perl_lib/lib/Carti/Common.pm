@@ -24,6 +24,7 @@ sub hash_to_xmlfile {
     my ($hash, $name, $root_name) = @_;
     $root_name = "out" if ! defined $root_name;
     my $xs = new XML::Simple();
+    unlink $name;
     my $xml = $xs->XMLout($hash,
 		    NoAttr => 1,
 		    RootName=>$root_name,

@@ -45,8 +45,18 @@ my $category_evaluare = "Evaluare";
 my $docs_prefix = shift;
 # my $work_prefix = "work_epub";
 my $work_prefix = "work_wiki";
-my $bad_file = "bad_files";
+my $bad_file = "$script_dir/bad_files";
+my $new_file = "$script_dir/new_files";
+my $good_file = "$script_dir/good_files";
+my $duplicate_file = "$script_dir/duplicate_files";
 my $control_file = "doc_info_file.txt";
+
+my $good_files_dir = "$docs_prefix/aaa_aaa/";
+my $bad_files_dir = "$docs_prefix/ab_aaa - RAU/";
+my $new_files_dir = "$docs_prefix/ac_noi/";
+
+our ($duplicate_files, $good_files, $new_files, $new_bad_files, $old_bad_files) = {};
+
 Common::makedir("$script_dir/$local_download_dir");
 
 my $colors = "yes";
@@ -54,28 +64,22 @@ my $our_wiki;
 my $debug = 1;
 my $url_sep = " -- ";
 my $font = "BookmanOS.ttf";
-my $bad_files_md5 = {};
-my $duplicate_files = {};
 
-sub remove_duplicates {
-    my $bad_files = "$script_dir/$bad_file";
-    $bad_files_md5 = Common::xmlfile_to_hash("$bad_files") if -f "$bad_files";
-
-    sub add_document_bad {
+sub get_files {
+    my $dir_q = shift;
+    our $hash_q = {};
+    sub add_documents {
 	my $file = shift;
 	$file = abs_path($file);
 	my $md5 = "md5_".Common::get_file_md5($file);
-	if ( defined $bad_files_md5->{$md5} ){
-	    $duplicate_files->{"$file"} = 1 if $file ge $bad_files_md5->{$md5};
-# 	    print "duplicate: \n".$file." and \n".$bad_files_md5->{$md5}."\n";
-	} else {
-	    $bad_files_md5->{$md5} = "$file";
-	}
+	$duplicate_files->{$file} = 1 if defined $hash_q->{$md5};
+	$hash_q->{$md5} = Encode::decode('utf8', $file);
     }
-    find ({wanted => sub { add_document_bad ($File::Find::name) if -f },},"$docs_prefix") if -d "$docs_prefix";
-    Common::hash_to_xmlfile($bad_files_md5, "$bad_files");
-    print Dumper($duplicate_files);
+
+    find ({wanted => sub { add_documents ($File::Find::name) if -f },}, $dir_q) if -d $dir_q;
+    return $hash_q;
 }
+
 sub get_authors {
     my $author = shift;
     my $authors;
@@ -462,7 +466,52 @@ sub import_documents {
     }
 }
 
-remove_duplicates();
+sub clean_files {
+    $old_bad_files = Common::xmlfile_to_hash("$bad_file") if -f "$bad_file";
+    $new_bad_files = get_files($bad_files_dir);
+    my (@tmp1, @tmp2) = ();
+
+    @tmp1 = (keys %$old_bad_files);
+    @tmp2 = (keys %$new_bad_files);
+    my ($only_in1, $only_in2, $common) = Common::array_diff(\@tmp1, \@tmp2);
+    $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$common);
+    $old_bad_files->{$_} = $new_bad_files->{$_} foreach (@$only_in2);
+    $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$only_in2);
+    Common::hash_to_xmlfile( $old_bad_files, $bad_file );
+
+#     $good_files = get_files($good_files_dir);
+#     Common::hash_to_xmlfile( $good_files, $good_file );
+    $good_files = Common::xmlfile_to_hash($good_file) if -f $good_file;
+
+#     $new_files = get_files($new_files_dir);
+#     Common::hash_to_xmlfile( $new_files, $new_file );
+    $new_files = Common::xmlfile_to_hash($new_file) if -f $new_file;
+
+    ## compare new files with bad files
+    @tmp1 = (keys %$new_files);
+    @tmp2 = (keys %$old_bad_files);
+    ($only_in1, $only_in2, $common) = Common::array_diff(\@tmp1, \@tmp2);
+    $duplicate_files->{$new_files->{$_}} = 1 foreach (@$common);
+
+    ## compare new files with good files
+    @tmp1 = (keys %$good_files);
+    @tmp2 = (keys %$old_bad_files);
+    ($only_in1, $only_in2, $common) = Common::array_diff(\@tmp1, \@tmp2);
+    $duplicate_files->{$new_files->{$_}} = 1 foreach (@$common);
+
+#     Common::hash_to_xmlfile( $duplicate_files, $duplicate_file );
+    foreach my $key (keys %$duplicate_files) {
+	next if ! -f $key;
+	my $file = decode_utf8($key);
+	my ($name,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
+# 	$dir = decode_utf8($dir);
+# 	print "mkdir -p \"\$BAD/$dir\";\nmv \"$key\" \"\$BAD/$dir\"\n";
+	Common::makedir("$docs_prefix/duplicate/$dir/");
+	move("$key", "$docs_prefix/duplicate/$dir/") || die "can't move duplicate file.\n";
+    }
+}
+
+clean_files();
 
 # import_documents();
 exit 1;
