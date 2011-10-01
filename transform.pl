@@ -72,7 +72,10 @@ sub get_files {
 	my $file = shift;
 	$file = abs_path($file);
 	my $md5 = "md5_".Common::get_file_md5($file);
-	$duplicate_files->{$file} = 1 if defined $hash_q->{$md5};
+	if ( defined $hash_q->{$md5} ) {
+	    print "Duplicate file: $file is the same as\n". $hash_q->{$md5} . "\n";
+	    $duplicate_files->{$file} = 1;
+	}
 	$hash_q->{$md5} = Encode::decode('utf8', $file);
     }
 
@@ -479,27 +482,29 @@ sub clean_files {
     $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$only_in2);
     Common::hash_to_xmlfile( $old_bad_files, $bad_file );
 
-#     $good_files = get_files($good_files_dir);
-#     Common::hash_to_xmlfile( $good_files, $good_file );
-    $good_files = Common::xmlfile_to_hash($good_file) if -f $good_file;
+    $good_files = get_files($good_files_dir);
+    Common::hash_to_xmlfile( $good_files, $good_file );
+#     $good_files = Common::xmlfile_to_hash($good_file) if -f $good_file;
 
-#     $new_files = get_files($new_files_dir);
-#     Common::hash_to_xmlfile( $new_files, $new_file );
-    $new_files = Common::xmlfile_to_hash($new_file) if -f $new_file;
+    $new_files = get_files($new_files_dir);
+    Common::hash_to_xmlfile( $new_files, $new_file );
+#     $new_files = Common::xmlfile_to_hash($new_file) if -f $new_file;
 
     ## compare new files with bad files
     @tmp1 = (keys %$new_files);
     @tmp2 = (keys %$old_bad_files);
     ($only_in1, $only_in2, $common) = Common::array_diff(\@tmp1, \@tmp2);
+print "Duplicate file: ".$new_files->{$_}." is the same as\n". $old_bad_files->{$_} . "\n" foreach (@$common);
     $duplicate_files->{$new_files->{$_}} = 1 foreach (@$common);
 
     ## compare new files with good files
     @tmp1 = (keys %$good_files);
-    @tmp2 = (keys %$old_bad_files);
+    @tmp2 = (keys %$new_files);
     ($only_in1, $only_in2, $common) = Common::array_diff(\@tmp1, \@tmp2);
+print "Duplicate file: ".$new_files->{$_}." is the same as\n". $good_files->{$_} . "\n" foreach (@$common);
     $duplicate_files->{$new_files->{$_}} = 1 foreach (@$common);
 
-#     Common::hash_to_xmlfile( $duplicate_files, $duplicate_file );
+    Common::hash_to_xmlfile( $duplicate_files, $duplicate_file );
     foreach my $key (keys %$duplicate_files) {
 	next if ! -f $key;
 	my $file = decode_utf8($key);
@@ -508,6 +513,7 @@ sub clean_files {
 # 	print "mkdir -p \"\$BAD/$dir\";\nmv \"$key\" \"\$BAD/$dir\"\n";
 	Common::makedir("$docs_prefix/duplicate/$dir/");
 	move("$key", "$docs_prefix/duplicate/$dir/") || die "can't move duplicate file.\n";
+	print Dumper($file);
     }
 }
 
