@@ -1,0 +1,68 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+$SIG{__WARN__} = sub { die @_ };
+$|++;
+
+use File::Find;
+use Cwd 'abs_path';
+use File::Basename;
+use Data::Dumper;
+my $path_prefix = abs_path(shift);
+
+sub add_document_audio {
+    my $file = shift;
+    my ($name,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
+    my $out = "/tmp/coco.aac";
+    unlink "$out";
+    print STDERR "Working on $file.\n";
+    $file =~ s/"/\\"/g;
+    system("ffmpeg -y -i \"$file\" -acodec copy \"$out\" 2> /dev/null");
+    die "missing $out.\n" if ! -f "$out";
+
+#     my $L1=`mplayer -vo null -vc null -vo null -ao null -frames 0 -identify "$out"  2> /dev/null | grep ^ID_LENGTH= | sed s/ID_LENGTH=//`;
+#     my $L2=`mplayer -vo null -vc null -vo null -ao null -frames 0 -identify "$file" 2> /dev/null | grep ^ID_LENGTH= | sed s/ID_LENGTH=//`;
+    my $L1=`ffmpeg -i "$out" 2>&1 | grep "Duration:" | gawk '{print \$2}'|sed s/:/*3600+/| sed s/:/*60+/| sed s/,// | bc`;
+    my $L2=`ffmpeg -i "$file" 2>&1 | grep "Duration:" | gawk '{print \$2}'|sed s/:/*3600+/| sed s/:/*60+/| sed s/,// | bc`;
+    if (! defined $L1 || $L1 eq "" || ! defined $L2 || $L2 eq "" ){print "result was undefined\n$file.\n";return;}
+    my $P=$L1*100/$L2;
+    unlink "$out";
+    return if $P>98;
+    print "result was $P\n$file.\n";
+}
+
+sub add_document_size {
+    my $file = shift;
+    my ($name,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
+    print STDERR "Working on $file.\n";
+    $file =~ s/"/\\"/g;
+    $file =~ s/"/\\"/g;
+    my $out = `mplayer -vo null -ao null -frames 0 -identify "$file" 2> /dev/null | grep ^ID_`;
+    die "Get info failed.\n" if $?;
+
+    my @tmp = split "\n", $out;
+    my $info = {};
+    foreach my $val (@tmp) {
+	my @tmp1 = split "=", $val;
+	die "cocot: $file".Dumper(@tmp1) if scalar @tmp1 > 2;
+	$info->{$tmp1[0]} = $tmp1[1];
+    }
+    print "$file ".$info->{'ID_VIDEO_FORMAT'}." ".$info->{'ID_VIDEO_CODEC'}." ".$info->{'ID_AUDIO_FORMAT'}." ".$info->{'ID_AUDIO_CODEC'}." ".$info->{'ID_VIDEO_WIDTH'}."\n" if !(
+$info->{'ID_VIDEO_FORMAT'} eq 'H264' &&
+$info->{'ID_VIDEO_CODEC'} eq 'ffh264' &&
+(! defined $info->{'ID_AUDIO_FORMAT'} || $info->{'ID_AUDIO_FORMAT'} eq 'MP4A') &&
+(! defined $info->{'ID_AUDIO_CODEC'} || $info->{'ID_AUDIO_CODEC'} eq 'ffaac') &&
+$info->{'ID_VIDEO_WIDTH'} <= 1280);
+# $info->{'ID_VIDEO_HEIGHT'} == '448'
+
+}
+
+sub add_document {
+    my $file = shift;
+#     print "$file\n" if $file !~ m/^[a-z0-9\/ \-\[\]\.()'_#@\^!\&+;,~]+$/i;
+    add_document_size($file);
+#     add_document_audio($file);
+}
+
+find ({ wanted => sub { add_document ($File::Find::name) if -f && (/(\.mp4|\.mpv)$/i) }}, $path_prefix ) if  (-d "$path_prefix");
