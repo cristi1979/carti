@@ -494,7 +494,7 @@ sub clean_files {
     @tmp1 = (keys %$new_files);
     @tmp2 = (keys %$old_bad_files);
     ($only_in1, $only_in2, $common) = Common::array_diff(\@tmp1, \@tmp2);
-print "Duplicate file: ".$new_files->{$_}." is the same as\n". $old_bad_files->{$_} . "\n" foreach (@$common);
+# print "Duplicate file: ".$new_files->{$_}." is the same as\n". $old_bad_files->{$_} . "\n" foreach (@$common);
     $duplicate_files->{$new_files->{$_}} = 1 foreach (@$common);
 
     ## compare new files with good files

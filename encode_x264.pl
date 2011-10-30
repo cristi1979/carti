@@ -273,19 +273,19 @@ sub work_on_audio {
 # print "$vcodec\n$vformat\n$chapters\n$acodec\n$aformat\n$arate\n$anrchannels\n";
 # print BAD "$movie ==> $vcodec $vformat n$chapters $acodec $aformat $arate $anrchannels\n" if !($acodec eq "faad" && $aformat eq "MP4A" && ($arate == 48000 || $arate == 44100 || $arate == 22050 || $arate == 32000) && $anrchannels > 3 && $chapters == 1) && ($vcodec eq "ffh264" && $info->{ID_VIDEO_FORMAT} eq 'H264');
 # close BAD;
-# return;
+# return $audio_file;
     print color("green"), "\t\t*** Audio info: codec=$acodec, format=$aformat.\n", color 'reset';
-    die "Unknown audio codec: $acodec $info->{ID_AUDIO_FORMAT}.\n" if defined $acodec && ($acodec ne "mp3" && $acodec ne "ffac3" && $acodec ne "alaw" && $acodec ne "ffdca" && $acodec ne "ffwmav2" && $acodec ne "pcm" && $acodec ne "ffadpcmimaqt" && ($acodec ne "faad" && $aformat eq "MP4A"));
+    die "Unknown audio codec: $acodec $info->{ID_AUDIO_FORMAT}.\n" if defined $acodec && ($acodec ne "mp3" && $acodec ne "ffac3" && $acodec ne "alaw" && $acodec ne "ffdca" && $acodec ne "ffwmav2" && $acodec ne "pcm" && $acodec ne "ffadpcmimaqt" && ($acodec ne "faad" && $aformat eq "MP4A") && ($acodec ne "ffaac" && $aformat eq "MP4A"));
     return $audio_file if $video_only eq "yes";
     unlink $audio_file if -f $audio_file;
 
-    if ($acodec eq "faad" && $aformat eq "MP4A" && ($arate == 48000 || $arate == 44100 || $arate == 32000 || $arate == 22050) && $anrchannels > 3 && $chapters == 1){
+    if (1==0 && ($acodec eq "faad" || $acodec eq "ffaac") && $aformat eq "MP4A" && ($arate == 48000 || $arate == 44100 || $arate == 32000 || $arate == 22050)){
 	print color("green"), "\t\t*** Copy audio with parameters $movie, $audio_file.\n", color 'reset';
 # 	system("mplayer", "-dumpaudio", "-dumpfile", "$audio_file", "$movie") == 0 or die "audio encoding failed (copy): $!\n";
 	system("ffmpeg", "-i", "$movie", "-acodec", "copy", "$audio_file") == 0 or die "audio encoding failed: $!\n";  ## for mp4
     } else {
 	print color("green"), "\t\t*** Transcoding audio with parameters $movie, $audio_file.\n", color 'reset';
-	system("bash", "-c", "mplayer -srate 48000 -nocorrect-pts -ao pcm:fast:file=>\($script_dir/nero/neroAacEnc -if - -of \"$audio_file\" 2>/dev/null\) -vo null -vc null \"$movie\"") == 0 or die "audio encoding failed (transcode): $!. From $movie to $audio_file.\n";
+	system("bash", "-c", "mplayer -alang eng -srate 48000 -nocorrect-pts -ao pcm:fast:file=>\($script_dir/nero/neroAacEnc -if - -of \"$audio_file\" 2>/dev/null\) -vo null -vc null \"$movie\"") == 0 or die "audio encoding failed (transcode): $!. From $movie to $audio_file.\n".Dumper("bash", "-c", "mplayer -srate 48000 -nocorrect-pts -ao pcm:fast:file=>\($script_dir/nero/neroAacEnc -if - -of \"$audio_file\" 2>/dev/null\) -vo null -vc null \"$movie\"");
     }
 
     return $audio_file;
@@ -371,19 +371,24 @@ sub work_on_file {
     if (! -d "$bkp_srt_path/$name") {mkpath("$bkp_srt_path/$name") || die "mkdir $bkp_srt_path/$name: $!\n";}
 
     return if $arg =~ m/\-m/i && -f "_$name.mp4.mkv";
-    my $audio = work_on_audio($movie, $info);
 # return;
     my $srt = work_on_subtitle($movie, $info);
+    my $audio = work_on_audio($movie, $info);
     my $video = work_on_video($movie, $info, $srt);
     return if $arg =~ m/\-[m|s]/i;
 #     ISO:
 #     copy all VOBs
 # mencoder dvd://10 -dvd-device /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso -oac copy -channels 6 -o audio -ovc frameno
-# lsdvd /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso
-# mplayer dvd://1 -dvd-device /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso -chapter 4
+## extract chapter
+# mplayer dvd://43 -dvd-device /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso -chapter 4
 #     cat 1.vob 2.vob ... > 0.vob
 #     mkvmerge -o coco.mkv 0.vos sub.ssa
 #     HandBrakeCLI -5 -e x264 -q 0.6 -f mp4 --rate 25 -O -4 -s 1 --subtitle-burn -2 -T -a 1 --aencoder copy:ac3  -i coco.mkv -o file.mp4
+
+# FILE=some.iso
+# lsdvd "$FILE" 	find all chapters (length > 1 min)
+# mplayer -aid 135 dvd://43 -dvd-device /"$FILE" 	find the correct language (128 +)
+# mencoder -aid 135 dvd://43 -dvd-device "$FILE" -idx -ovc copy -oac copy -o some.avi
 
 #     flv:
 #     NAME=Bare_Necessities
@@ -392,7 +397,7 @@ sub work_on_file {
 #     mencoder -ss 00:10:00 -endpos 00:01:00 -ovc copy -oac copy -o result.avi "$FILE"
 #     mplayer -vo null -ao null -frames 0 -identify "$file" 2> /dev/null | grep "^ID_"
 
-# mplayer dvd://10 -dvd-device /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso  -idx -ovc copy -nosound -o /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.avi
+# mencoder dvd://10 -dvd-device /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso  -idx -ovc copy -nosound -o /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.avi
 # /home/cristi/programe/scripts/nero/neroAacEnc -ignorelength -q 0.60 -if audiodump.wav -of audio.m4a & mplayer -vc null -vo null -ao pcm:fast dvd://10 -dvd-device /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso
 
 # `ffmpeg -i "$file" -i "/media/Video3/__din nou/$name.audio" -map 0:0 -map 1:0 -acodec copy -vcodec copy "/media/Video1/Seriale/STNG/$name.mp4"`;
@@ -420,15 +425,19 @@ sub work_on_file {
 
 #     my $offset = "00:00:0.400";
 #     my $offset = "00:00:0"; , "-itsoffset", "$offset"
+# return;
     move ($movie, "$movie.original");
     $movie = "$movie.original";
-    sleep 3;
+    sleep 25;
     die "no audio: $audio\n" if ! -f "$audio";
     die "no video: $video\n" if ! -f "$video";
     print color("green"), "\t\t*** Joining audio and video with parameters $audio, $video, $dir/$name.mp4.\n", color 'reset';
 #     system("ffmpeg", "-i", "$audio", "-acodec", "copy", "-i", "$video", "-vcodec", "copy", "$dir/$name.mp4") == 0 or die "error running ffmpeg: $?.\n";
-    `ffmpeg -i "$audio" -acodec copy -i "$video" -vcodec copy "$dir/$name.mp4"`;
-    die "Joining failed.\n" if $?;
+    my $output = `ffmpeg -i "$audio" -acodec copy -i "$video" -vcodec copy "$dir/$name.mp4" 2>&1`;
+    if ( $? || $output =~ m/\[mov,mp4,m4a,3gp,3g2,mj2 @ (.*?)\] stream 0, offset (.*?): partial file/ ) {
+	print "Joining failed:\n$output.\n";
+	return;
+    }
 
     my $audio_size = -s "$audio" || 0;
     my $video_size = -s "$video" || 0;
@@ -443,6 +452,18 @@ sub work_on_file {
 #     move("$srt","$bkp_path/$name/") || die "mv srt: $!\n"  if -f "$srt";
 }
 
+sub extract_mkv {
+    my $file = shift;
+    my ($name,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
+    my $nr_tracks = `mkvinfo "$file" | grep "Track number:" | sort | tail -1 | sed "s/|  + Track number: //"`;
+    my $tracks = "";
+    for (my $i=1;$i<=$nr_tracks;$i++) {
+	$tracks .= " $i:\"$file\".$i "
+    }
+    print "$tracks\n";
+    `mkvextract tracks "$file" $tracks`;
+}
+
 sub add_document {
     my $file = shift;
     print "Adding $file.\n";
@@ -450,7 +471,7 @@ sub add_document {
 
     $file =~ s/"/\\"/g;
     my $out = `mplayer -vo null -ao null -frames 0 -identify "$file" 2> /dev/null | grep ^ID_`;
-    die "Get ingo failed.\n" if $?;
+    die "Get info failed.\n" if $?;
 
     my @tmp = split "\n", $out;
     my $info = {};
@@ -462,6 +483,7 @@ sub add_document {
 
     $movies->{$info->{ID_FILENAME}} = $info;
     work_on_file($info->{ID_FILENAME}, $info);
+#     extract_mkv($file) if $suffix =~ m/^\.mkv$/i;
 }
 
-find ({ wanted => sub { add_document ($File::Find::name) if -f && (/(\.avi|\.mpg|\.mpeg|\.flv|\.wmv|\.mov|\.3gp|\.ogm|\.divx|\.3gp|\.ogm|\._iso_|\._mp4_|\._mkv_)$/i) }}, $path_prefix ) if  (-d "$path_prefix");
+find ({ wanted => sub { add_document ($File::Find::name) if -f && (/(\.avi|\.mpg|\.mpeg|\.flv|\.wmv|\.mov|\.3gp|\.ogm|\.divx|\.3gp|\.ogm|\._iso_|\._mp4_|\.mkv)$/i) }}, $path_prefix ) if  (-d "$path_prefix");
