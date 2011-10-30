@@ -7,6 +7,7 @@ $SIG{__WARN__} = sub { die @_ };
 # perl -e 'print sprintf("\\x{%x}", $_) foreach (unpack("C*", "Ó"));print"\n"'
 use Cwd 'abs_path';
 use File::Basename;
+$| = 1;
 
 BEGIN {
   unless ($ENV{BEGIN_BLOCK}) {
@@ -45,9 +46,6 @@ my $category_evaluare = "Evaluare";
 my $docs_prefix = shift;
 # my $work_prefix = "work_epub";
 my $work_prefix = "work_wiki";
-my $bad_file = "$script_dir/bad_files";
-my $new_file = "$script_dir/new_files";
-my $good_file = "$script_dir/good_files";
 my $duplicate_file = "$script_dir/duplicate_files";
 my $control_file = "doc_info_file.txt";
 
@@ -68,18 +66,22 @@ my $font = "BookmanOS.ttf";
 sub get_files {
     my $dir_q = shift;
     our $hash_q = {};
+    print "Get files from $dir_q.\n";
+    our $count = 0;
     sub add_documents {
 	my $file = shift;
+	print "$count\r" if ++$count % 10 == 0;
 	$file = abs_path($file);
 	my $md5 = "md5_".Common::get_file_md5($file);
 	if ( defined $hash_q->{$md5} ) {
-	    print "Duplicate file: $file is the same as\n". $hash_q->{$md5} . "\n";
 	    $duplicate_files->{$file} = 1;
+	    print Dumper("duplicate $file");
+	    return;
 	}
-	$hash_q->{$md5} = Encode::decode('utf8', $file);
+	$hash_q->{$md5} = $file; #Encode::decode('utf8', );
     }
 
-    find ({wanted => sub { add_documents ($File::Find::name) if -f },}, $dir_q) if -d $dir_q;
+    find ({wanted => sub { add_documents ($File::Find::name) if -f }, follow => 1}, $dir_q) if -d $dir_q;
     return $hash_q;
 }
 
@@ -470,25 +472,41 @@ sub import_documents {
 }
 
 sub clean_files {
-    $old_bad_files = Common::xmlfile_to_hash("$bad_file") if -f "$bad_file";
-    $new_bad_files = get_files($bad_files_dir);
-    my (@tmp1, @tmp2) = ();
+my $bad_file = "$script_dir/bad_files";
+my $new_file = "$script_dir/new_files";
+my $good_file = "$script_dir/good_files";
+    if (-f $bad_file && ! -f "$bad_file.zip") {
+	$old_bad_files = Common::xmlfile_to_hash("$bad_file");
+    } elsif (! -f $bad_file && -f "$bad_file.zip") {
+	$old_bad_files = Common::xmlfile_to_hash(Common::read_file_from_zip("$bad_file.zip", "bad_files"));
+    } else {
+	die "Error deciding between $bad_file and $bad_file.zip\n";
+    }
 
+#     $good_files = get_files($good_files_dir);
+#     Common::hash_to_xmlfile( $good_files, $good_file );
+    $good_files = Common::xmlfile_to_hash($good_file) if -f $good_file;
+#     $new_files = get_files($new_files_dir);
+#     Common::hash_to_xmlfile( $new_files, $new_file );
+    $new_files = Common::xmlfile_to_hash($new_file) if -f $new_file;
+#     $new_bad_files = get_files($bad_files_dir);
+#     Common::hash_to_xmlfile( $new_bad_files, "$bad_file.new" );
+    $new_bad_files = Common::xmlfile_to_hash("$bad_file.new");
+# exit 1;
+
+    my (@tmp1, @tmp2) = ();
     @tmp1 = (keys %$old_bad_files);
     @tmp2 = (keys %$new_bad_files);
     my ($only_in1, $only_in2, $common) = Common::array_diff(\@tmp1, \@tmp2);
-    $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$common);
     $old_bad_files->{$_} = $new_bad_files->{$_} foreach (@$only_in2);
-    $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$only_in2);
     Common::hash_to_xmlfile( $old_bad_files, $bad_file );
-
-    $good_files = get_files($good_files_dir);
-    Common::hash_to_xmlfile( $good_files, $good_file );
-#     $good_files = Common::xmlfile_to_hash($good_file) if -f $good_file;
-
-    $new_files = get_files($new_files_dir);
-    Common::hash_to_xmlfile( $new_files, $new_file );
-#     $new_files = Common::xmlfile_to_hash($new_file) if -f $new_file;
+    unlink ("$bad_file.zip");
+    Common::add_file_to_zip("$bad_file.zip", $bad_file);
+    unlink ($bad_file);
+    ### all bad files are duplicate files
+    $duplicate_files->{$old_bad_files->{$_}} = 1 foreach (@$only_in1);
+    $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$common);
+    $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$only_in2);
 
     ## compare new files with bad files
     @tmp1 = (keys %$new_files);
@@ -501,19 +519,19 @@ sub clean_files {
     @tmp1 = (keys %$good_files);
     @tmp2 = (keys %$new_files);
     ($only_in1, $only_in2, $common) = Common::array_diff(\@tmp1, \@tmp2);
-print "Duplicate file: ".$new_files->{$_}." is the same as\n". $good_files->{$_} . "\n" foreach (@$common);
+# print "Duplicate file: ".$new_files->{$_}." is the same as\n". $good_files->{$_} . "\n" foreach (@$common);
     $duplicate_files->{$new_files->{$_}} = 1 foreach (@$common);
 
     Common::hash_to_xmlfile( $duplicate_files, $duplicate_file );
     foreach my $key (keys %$duplicate_files) {
-	next if ! -f $key;
 	my $file = decode_utf8($key);
+	die "Dissapeared: $key\n" if ! -f $key;
 	my ($name,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
 # 	$dir = decode_utf8($dir);
 # 	print "mkdir -p \"\$BAD/$dir\";\nmv \"$key\" \"\$BAD/$dir\"\n";
 	Common::makedir("$docs_prefix/duplicate/$dir/");
-	move("$key", "$docs_prefix/duplicate/$dir/") || die "can't move duplicate file.\n";
-	print Dumper($file);
+	move("$key", "$docs_prefix/duplicate/$dir/") || die "can't move duplicate file\n\t$key.\n";
+	print Dumper("duplicate ".$file);
     }
 }
 

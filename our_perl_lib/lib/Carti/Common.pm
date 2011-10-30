@@ -42,17 +42,34 @@ sub get_file_md5 {
 }
 
 sub add_file_to_zip {
-    my ($zip_file, $add_file) = @_;
-    my ($name,$dir,$suffix) = fileparse($add_file, qr/\.[^.]*/);
+    my ($zip_file, $add_file, $txt) = @_;
+    my $member;
 
     my $zip = Archive::Zip->new();
     if (-f $zip_file){$zip->read("$zip_file") == AZ_OK or die "read error\n"};
-    $zip->addFile("$add_file", "$name$suffix") or die "Error adding file $name$suffix to zip";
+    if (! defined $txt) {
+	my ($name,$dir,$suffix) = fileparse($add_file, qr/\.[^.]*/);
+	$zip->removeMember( "$name$suffix" );
+	$member = $zip->addFile("$add_file", "$name$suffix") or die "Error adding file $name$suffix to zip";
+    } else {
+	$zip->removeMember( $add_file );
+	$member = $zip->addString($txt, $add_file) or die "Error adding txt $add_file to zip";
+    }
+    $member->desiredCompressionLevel( 9 );
     if (-f $zip_file){
 	$zip->overwrite()     == AZ_OK or die "write error\n"
     } else {
 	$zip->writeToFileNamed( "$zip_file" ) == AZ_OK or die "write new zip error\n"
     };
+}
+
+sub read_file_from_zip {
+    my ($zip_file, $read_file) = @_;
+    my ($name,$dir,$suffix) = fileparse($read_file, qr/\.[^.]*/);
+
+    my $zip = Archive::Zip->new();
+    if (-f $zip_file){$zip->read("$zip_file") == AZ_OK or die "read error\n"};
+    return $zip->contents($read_file);
 }
 
 sub normalize_text {
