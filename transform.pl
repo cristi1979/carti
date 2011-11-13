@@ -53,7 +53,7 @@ my $good_files_dir = "$docs_prefix/aaa_aaa/";
 my $bad_files_dir = "$docs_prefix/ab_aaa - RAU/";
 my $new_files_dir = "$docs_prefix/ac_noi/";
 
-our ($duplicate_files, $good_files, $new_files, $new_bad_files, $old_bad_files) = {};
+our $duplicate_files = {};
 
 Common::makedir("$script_dir/$local_download_dir");
 
@@ -65,6 +65,7 @@ my $font = "BookmanOS.ttf";
 
 sub get_files {
     my $dir_q = shift;
+    $dir_q = abs_path($dir_q);
     our $hash_q = {};
     print "Get files from $dir_q.\n";
     our $count = 0;
@@ -82,6 +83,7 @@ sub get_files {
     }
 
     find ({wanted => sub { add_documents ($File::Find::name) if -f }, follow => 1}, $dir_q) if -d $dir_q;
+    print "$count\n";
     return $hash_q;
 }
 
@@ -472,6 +474,7 @@ sub import_documents {
 }
 
 sub clean_files {
+my ($good_files, $new_files, $new_bad_files, $old_bad_files) = {};
 my $bad_file = "$script_dir/bad_files";
 my $new_file = "$script_dir/new_files";
 my $good_file = "$script_dir/good_files";
@@ -483,17 +486,18 @@ my $good_file = "$script_dir/good_files";
 	die "Error deciding between $bad_file and $bad_file.zip\n";
     }
 
-#     $good_files = get_files($good_files_dir);
-#     Common::hash_to_xmlfile( $good_files, $good_file );
-    $good_files = Common::xmlfile_to_hash($good_file) if -f $good_file;
-#     $new_files = get_files($new_files_dir);
-#     Common::hash_to_xmlfile( $new_files, $new_file );
-    $new_files = Common::xmlfile_to_hash($new_file) if -f $new_file;
-#     $new_bad_files = get_files($bad_files_dir);
-#     Common::hash_to_xmlfile( $new_bad_files, "$bad_file.new" );
-    $new_bad_files = Common::xmlfile_to_hash("$bad_file.new");
-# exit 1;
+    $good_files = get_files($good_files_dir);
+    Common::hash_to_xmlfile( $good_files, $good_file );
+    $new_files = get_files($new_files_dir);
+    Common::hash_to_xmlfile( $new_files, $new_file );
+    $new_bad_files = get_files($bad_files_dir);
+    Common::hash_to_xmlfile( $new_bad_files, "$bad_file.new" );
 
+#     $good_files = Common::xmlfile_to_hash($good_file) if -f $good_file;
+#     $new_files = Common::xmlfile_to_hash($new_file) if -f $new_file;
+#     $new_bad_files = Common::xmlfile_to_hash("$bad_file.new");
+
+    ## compare new bad files with old bad files
     my (@tmp1, @tmp2) = ();
     @tmp1 = (keys %$old_bad_files);
     @tmp2 = (keys %$new_bad_files);
@@ -504,7 +508,6 @@ my $good_file = "$script_dir/good_files";
     Common::add_file_to_zip("$bad_file.zip", $bad_file);
     unlink ($bad_file);
     ### all bad files are duplicate files
-    $duplicate_files->{$old_bad_files->{$_}} = 1 foreach (@$only_in1);
     $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$common);
     $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$only_in2);
 
@@ -525,7 +528,7 @@ my $good_file = "$script_dir/good_files";
     Common::hash_to_xmlfile( $duplicate_files, $duplicate_file );
     foreach my $key (keys %$duplicate_files) {
 	my $file = decode_utf8($key);
-	die "Dissapeared: $key\n" if ! -f $key;
+	next, die "Dissapeared: $key\n" if ! -f $key;
 	my ($name,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
 # 	$dir = decode_utf8($dir);
 # 	print "mkdir -p \"\$BAD/$dir\";\nmv \"$key\" \"\$BAD/$dir\"\n";

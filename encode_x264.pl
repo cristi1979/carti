@@ -169,7 +169,7 @@ sub work_on_subtitle {
     close MYFILE;
 
     my @to_move = ();
-    my $fontsize = sprintf "%.0f", 4/100*sqrt($w*$w+$h*$h);
+    my $fontsize = sprintf "%.0f", 3/100*sqrt($w*$w+$h*$h);
     my $header = '[Script Info]
 ; This script was created by subtitleeditor (0.38.0)
 ; http://home.gna.org/subtitleeditor/
@@ -375,7 +375,7 @@ sub work_on_file {
     my $srt = work_on_subtitle($movie, $info);
     my $audio = work_on_audio($movie, $info);
     my $video = work_on_video($movie, $info, $srt);
-    return if $arg =~ m/\-[m|s]/i;
+#     return if $arg =~ m/\-[m|s]/i;
 #     ISO:
 #     copy all VOBs
 # mencoder dvd://10 -dvd-device /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso -oac copy -channels 6 -o audio -ovc frameno
