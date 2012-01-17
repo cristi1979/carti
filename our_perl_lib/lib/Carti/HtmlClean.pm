@@ -36,9 +36,7 @@ sub css_clean {
     $css = CSS::Tiny->read( "$file" );
     my @no_display = ();
     my @delete_selectors = ();
-# print Dumper($file);exit 1;
     foreach my $selector (keys %$css) {
-# 	delete $css->{$selector}, next if $selector =~ m/>/;
 	my $bad=0;
 	foreach my $elem1 (split ' ', $selector) {
 	    my @search = ();
@@ -47,7 +45,6 @@ sub css_clean {
 		next if $elem =~ m/^\s*$/;
 		my ($tag, $id, $class, $unknown);
 		if ($elem =~ m/[^\.#:0-9a-z\-_]/i) {
-    # 		delete $css->{$selector};
 		    $bad++;
 		    last;
 		}
@@ -67,7 +64,6 @@ sub css_clean {
 		}
 		## we don't like links or html
 		if (defined $tag && $tag =~ m/^(a|html)$/) {
-# 		    delete $css->{$selector};
 		    push @delete_selectors, $selector;
 		    $bad++;
 		    last;
@@ -75,10 +71,8 @@ sub css_clean {
 	    }
 	    next if $bad;
 	    foreach (keys %{$css->{$selector}}){
-    # 	    if ($_ eq "font-family") { delete $css->{$selector};last;}
 		if ($_ eq "display" && $css->{$selector}->{$_} eq "none") {
 		    push @no_display, \@search;
-# 		    delete $css->{$selector};
 		    push @delete_selectors, $selector;
 		    last;
 		}
@@ -136,6 +130,24 @@ sub wiki_tree_clean_css {
     $head->push_content($style);
     unlink "$_" foreach (@css_files);
 
+    return $tree;
+}
+
+sub doc_tree_clean_css_from_oo {
+    my ($tree, $work_dir) = @_;
+    print "\tClean css.\n";
+    ## delete all css from oo
+    foreach my $a_tag ($tree->guts->look_down(_tag => 'style')) {
+	$a_tag->detach if (defined $a_tag->attr('type') && $a_tag->attr('type') eq "text/css");
+    }
+
+    my $css_txt = "p,table,li {line-height: 1.2em; font-size: .91em; margin: .5em;text-align:justify;}\n";
+    $css_txt .= "table {margin: .5em;}\n";
+    $css_txt .= "h1,h2,h3,h4,h5,h6,h7,h8 {text-align:center;}\n";
+    my $style = HTML::Element->new('style');
+    $style->push_content($css_txt);
+    my $head = $tree->findnodes( '/html/head')->[0];
+    $head->push_content($style);
     return $tree;
 }
 
@@ -231,7 +243,7 @@ sub doc_tree_clean_tables {
 				|| $attr_name eq "sdval"
 				|| $attr_name eq "valign"){
 			    $c_tag->attr("$attr_name", undef);
-			} elsif ($attr_name eq "bgcolor" || $attr_name eq "colspan" || $attr_name eq "rowspan" 
+			} elsif ($attr_name eq "bgcolor" || $attr_name eq "colspan" || $attr_name eq "rowspan"
 				|| $attr_name eq "width"
 				|| $attr_name eq "height") {
 			} else {
@@ -296,7 +308,7 @@ sub wiki_tree_clean_wiki {
     my $meta = HTML::Element->new("meta", 'http-equiv' => "Content-Type", 'content' => "text/html; charset=utf-8");
     my $elem = $tree->findnodes( '/html/head')->[0];
     $elem->preinsert($meta);
-    
+
     $elem = $tree->findnodes( '//div[@id="content"]')->[0];
     $elem->replace_with_content;
     $elem = $tree->findnodes( '//div[@id="bodyContent"]')->[0];
@@ -328,6 +340,7 @@ sub wiki_tree_clean_wiki {
 sub wiki_tree_fix_links {
     my ($tree, $wiki_site) = @_;
     my @images = ();
+    print "\tFix links from wiki.\n";
     my $refs;
     foreach (@{  $tree->extract_links()  }) {
 	my($link, $element, $attr, $tag) = @$_;
@@ -349,7 +362,7 @@ sub wiki_tree_fix_links {
 		die "check name $name.\n" if defined $name;
 		$element->attr($attr, "$new_name");
 	    } else {
-		print "Hey, there's tag $tag that links to ", $link, ", in its $attr attribute.\n";
+		die "Hey, there's tag $tag that links to ", $link, ", in its $attr attribute.\n";
 	    }
 	} else {
 	    die "Hey, there's tag $tag that links to ", $link, ", in its $attr attribute.\n";
@@ -371,6 +384,17 @@ sub wiki_tree_fix_links {
     return $tree, \@images;
 }
 
+sub wiki_tree_clean_body {
+    my $tree = shift;
+    print "\tClean script.\n";
+    foreach my $a_tag ($tree->guts->look_down(_tag => 'body')) {
+	foreach my $attr_name ($a_tag->all_external_attr_names()) {
+	    $a_tag->attr("$attr_name", undef);
+	}
+    }
+    return $tree;
+}
+
 sub wiki_tree_clean_script {
     my ($tree, $work_dir) = @_;
     print "\tClean script.\n";
@@ -382,7 +406,7 @@ sub wiki_tree_clean_script {
     return $tree;
 }
 
-# A NAME="sdfootnote122anc" HREF="#sdfootnote122sym" CLASS="sdfootnoteanc" 
+# A NAME="sdfootnote122anc" HREF="#sdfootnote122sym" CLASS="sdfootnoteanc"
 # DIV ID="sdfootnote122"
 # A NAME="sdfootnote122sym" HREF="#sdfootnote122anc" CLASS="sdfootnotesym-western"
 
@@ -394,9 +418,9 @@ sub wiki_tree_clean_script {
 # <A HREF="#cite_note-0"><FONT COLOR="#7030a0"><SUP>[1]</SUP></FONT></A>
 # <A NAME="cite_note-0"></A>
 # <A HREF="#cite_ref-0">↑</A>
-sub doc_tree_fix_links {
+sub doc_tree_fix_links_for_wiki {
     my ($tree, $no_links) = @_;
-    print "\tFix links.\n";
+    print "\tFix links and notes for wiki.\n";
     my $ref_hash = {};
     my $footnote = {};
     $footnote->{'1'} = [qr/sdfootnote([0-9]{1,})anc/, qr/sdfootnote([0-9]{1,})sym/];
@@ -446,7 +470,7 @@ sub doc_tree_fix_links {
 	}
 	my $a_ref = HTML::Element->new('ref');
 	my $have_text = 0;
-	if ($txt->parent->tag eq "div" && defined $txt->parent->attr('id') && 
+	if ($txt->parent->tag eq "div" && defined $txt->parent->attr('id') &&
 		($txt->parent->attr('id') =~ m/^sdfootnote/ || $txt->parent->attr('id') =~ m/^Section/)) {
 	    $txt = $txt->parent;
 	    foreach my $a_tag ($txt->look_down(_tag => 'p')) {
@@ -467,6 +491,39 @@ sub doc_tree_fix_links {
     return ($tree, $images);
 }
 
+sub doc_tree_fix_links_from_oo {
+    my ($tree, $no_links) = @_;
+    print "\tFix links.\n";
+
+    my $images = {};
+    foreach (@{  $tree->extract_links()  }) {
+	my($link, $element, $attr, $tag) = @$_;
+	if ($tag eq "img" || $tag eq "body") {
+	    my $name_ext = Common::normalize_text(uri_unescape($link));
+	    $name_ext =~ s/^\.\.\///;
+	    my ($name,$dir,$ext) = fileparse($name_ext, qr/\.[^.]*/);
+	    my $new_name = $name."_conv.jpg";
+	    $images->{"$name$ext"} = "$new_name";
+	    $element->attr($attr, uri_escape $new_name);
+	} elsif ($tag eq "a") {
+	} else {
+	    $element->replace_with_content();
+	    print "Hey, there's tag $tag that links to ", $link, ", in its $attr attribute.\n";
+	    die if $no_links;
+	}
+    }
+    return ($tree, $images);
+}
+
+sub doc_find_unknown_elements {
+    my $tree = shift;
+    print "\tFind unknown elements.\n";
+    foreach my $a_tag ($tree->descendants()) {
+	print "Unknown tag: ".$a_tag->tag."\n" if $a_tag->tag !~ m/^h[0-9]{1,2}$/ &&
+	      $a_tag->tag !~ m/^(head|meta|font|p|div|br|a|dd|dl|dt|title|i|img|span|sup|body|style|b|ul|li)$/;
+    }
+    return $tree;
+}
 
 sub doc_tree_remove_TOC {
     my $tree = shift;
@@ -766,6 +823,15 @@ sub doc_tree_clean_b_i {
     return $tree;
 }
 
+sub doc_tree_clean_sub {
+    my $tree = shift;
+    print "\tClean empty sub.\n";
+    foreach my $a_tag ($tree->guts->look_down(_tag => "sub")) {
+	$a_tag->replace_with_content if ($a_tag->as_text =~ m/^\s*$/);
+    }
+    return $tree;
+}
+
 sub doc_tree_fix_paragraph_center {
     my $tree = shift;
     print "\tFix paragraph centers.\n";
@@ -781,6 +847,42 @@ sub doc_tree_fix_paragraph_center {
 	    $center->push_content($a_tag->clone);
 	    $a_tag->preinsert($center);
 	    $a_tag->detach;
+	}
+    }
+    return $tree;
+}
+
+sub doc_tree_fix_paragraph {
+    my $tree = shift;
+    print "\tFix paragraph.\n";
+    foreach my $a_tag ($tree->guts->look_down(_tag => "p")) {
+	foreach my $attr_name ($a_tag->all_external_attr_names){
+	    my $attr_value = $a_tag->attr($attr_name);
+	    if ($attr_name eq "style") {
+		my @attr_values = split ';', $attr_value;
+		foreach my $attr_val (@attr_values) {
+		    if ($attr_val =~ m/^\s*margin-(top|bottom|left|right): ([0-9]+\.)?[0-9]+in\s*$/i
+			  || $attr_val =~ m/^\s*text-indent: -?([0-9]+\.)?[0-9]+in\s*$/i
+			  || $attr_val =~ m/^\s*line-height: [0-9]+%\s*$/i
+			  || $attr_val =~ m/^\s*(widows|orphans): [0-9]+\s*$/i
+			  || $attr_val =~ m/^\s*border-(top|bottom|left|right): .+\s*$/i
+			  || $attr_val =~ m/^\s*page-break-(after|before|inside): (avoid|always)\s*$/i
+			  || $attr_val =~ m/^\s*background: #[0-9a-f]{6}\s*$/i
+			  || $attr_val =~ m/^\s*padding-(top|bottom|left|right): ([0-9]+\.)?[0-9]+in\s*$/i
+			) {
+			$a_tag->attr($attr_name, undef);
+		    } elsif ($attr_val =~ m/^\s*font-(weight|style): normal\s*$/i) {
+		    } else {
+			die "\t\tUnknown value for style in paragraph: $attr_val.\n";
+		    }
+		}
+	    } elsif ($attr_name eq "align") {
+		die "\t\tUnknown value for align in paragraph: $attr_value.\n" if $attr_value !~ m/^(center|justify|left|right)$/i;
+	    } elsif ($attr_name eq "lang" || $attr_name eq "class") {
+		$a_tag->attr($attr_name, undef)
+	    } else {
+		die "\t\tUnknown attr in paragraph: $attr_name.\n";
+	    }
 	}
     }
     return $tree;

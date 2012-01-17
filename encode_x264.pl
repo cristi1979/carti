@@ -375,7 +375,7 @@ sub work_on_file {
     my $srt = work_on_subtitle($movie, $info);
     my $audio = work_on_audio($movie, $info);
     my $video = work_on_video($movie, $info, $srt);
-#     return if $arg =~ m/\-[m|s]/i;
+    return if $arg =~ m/\-[m|s]/i;
 #     ISO:
 #     copy all VOBs
 # mencoder dvd://10 -dvd-device /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso -oac copy -channels 6 -o audio -ovc frameno
@@ -387,7 +387,7 @@ sub work_on_file {
 
 # FILE=some.iso
 # lsdvd "$FILE" 	find all chapters (length > 1 min)
-# mplayer -aid 135 dvd://43 -dvd-device /"$FILE" 	find the correct language (128 +)
+# mplayer -aid 135 dvd://43 -dvd-device "$FILE" 	find the correct language (128 +)
 # mencoder -aid 135 dvd://43 -dvd-device "$FILE" -idx -ovc copy -oac copy -o some.avi
 
 #     flv:
