@@ -5,8 +5,7 @@
     GlobalScope.BasicLibraries.LoadLibrary(&quot;Tools&quot;)
     oDoc = StarDesktop.loadComponentFromURL(cURL, &quot;_blank&quot;, 0, (_
 	    Array(MakePropertyValue(&quot;FilterName&quot;, &quot;HTML (StarWriter)&quot;) ,MakePropertyValue( &quot;Hidden&quot;, True ),)) 
-    sFile = GetFileNameWithoutExtension(oDoc.url) + &quot;.odt&quot;
-    sURL = ConvertToURL( sFile )
+
     allImages = oDoc.GraphicObjects
     for x = 0 to allImages.Count -1
       imageX = allImages.getByIndex(x)
@@ -15,6 +14,8 @@
       end if
     next
     
+    sFile = GetFileNameWithoutExtension(oDoc.url) + &quot;.odt&quot;
+    sURL = ConvertToURL( sFile )
     oDoc.storeToURL( sURL, Array(_
 	    MakePropertyValue( &quot;FilterName&quot;, &quot;writer8&quot; ),)
 
@@ -45,6 +46,24 @@ Function MakePropertyValue( Optional cName As String, Optional uValue ) _
    MakePropertyValue() = oPropertyValue
 End Function
 
+Sub ReplaceNBHyphenHTML(cFile)
+    cURL = ConvertToURL( cFile )
+    GlobalScope.BasicLibraries.LoadLibrary(&quot;Tools&quot;)
+    oDoc = StarDesktop.loadComponentFromURL(cURL, &quot;_blank&quot;, 0, Array()) 
+
+    oReplace = ThisComponent.createReplaceDescriptor()
+	oReplace.SearchCaseSensitive = True
+	oReplace.SearchString = chr(clng(&quot;&amp;H2011&quot;))
+	oReplace.ReplaceString = &quot;-&quot;
+	ThisComponent.ReplaceAll(oReplace)
+
+    sFile = GetFileNameWithoutExtension(oDoc.url) + &quot;.html&quot;
+    sURL = ConvertToURL( sFile )
+
+    oDoc.storeAsURL(sURL, Array(MakePropertyValue(&quot;FilterName&quot;, &quot;HTML (StarWriter)&quot;),))
+    oDoc.close( True )
+End Sub
+
 Sub ReplaceNBHyphen(cFile)
     cURL = ConvertToURL( cFile )
     GlobalScope.BasicLibraries.LoadLibrary(&quot;Tools&quot;)
@@ -57,8 +76,8 @@ Sub ReplaceNBHyphen(cFile)
 	oReplace.ReplaceString = &quot;-&quot;
 	ThisComponent.ReplaceAll(oReplace)
 
-    oDoc.storeAsURL( sURL, Array())
+    oDoc.storeAsURL( sURL, Array()) 
     oDoc.close( True )
-End Sub
+End Sub  
 
 </script:module>

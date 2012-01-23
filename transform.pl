@@ -114,10 +114,40 @@ sub get_series {
     return ($series, $series_no, $file);
 }
 
+my $first_time = 0;
+sub doc_to_html_macro {
+    my $doc_file = shift;
+    my ($name,$dir,$suffix) = fileparse($doc_file, qr/\.[^.]*/);
+    print "\t-Generating html file from $doc_file.\n";
+    my $status;
+    if ($first_time == 0) {
+	remove_tree($ENV{"HOME"} ."/.libreoffice/") || die "Can't remove dir ".$ENV{"HOME"}."/.libreoffice/: $!.\n" if -d $ENV{"HOME"} ."/.libreoffice/";
+	system("Xvfb :10235 -screen 0 1024x768x16 &> /dev/null &") if $os ne "windows";
+	system("libreoffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "libreoffice failed: $?";
+	copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", $ENV{"HOME"} ."/.libreoffice/3/user/basic/Standard/") or die "Copy failed libreoffice macros: $!\n";
+	$first_time++;
+    }
+
+    eval {
+	die  if $os eq "windows";
+	local $SIG{ALRM} = sub { die "alarm\n" };
+	alarm 600;
+	system("libreoffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
+	alarm 0;
+    };
+    $status = $?;
+    if ($status) {
+	printf "Error: Timed out: $status. Child exited with value %d\n", $status >> 8;
+    } else {
+	print "\tFinished with status: $status.\n";
+    }
+    print "\t+Generating html file from $doc_file.\n";
+    return 0;
+}
+
 sub doc_to_html {
     my $doc_file = shift;
     my ($name,$dir,$suffix) = fileparse($doc_file, qr/\.[^.]*/);
-#     return 0 if $suffix =~ m/^\.html?$/i;
     print "\t-Generating html file from $doc_file.\n";
     my $status;
     eval {
@@ -365,7 +395,7 @@ sub libreoffice_to_epub {
     Common::makedir($work_dir);
     copy("$file", $working_file) or die "Copy failed $working_file: $!\n";
 
-    my $res = doc_to_html("$working_file");
+    my $res = doc_to_html_macro("$working_file");
     my $html_file = "$work_dir/$name.html";
     if ($res || ! -s $html_file) {die "Can't generate html.\n";next;}
     my ($html, $images) = clean_html_from_oo(Common::read_file("$html_file"), $work_dir);
