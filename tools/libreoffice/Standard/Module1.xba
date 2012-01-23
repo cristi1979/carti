@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
-<script:module xmlns:script="http://openoffice.org/2000/script" script:name="ConvertesteCarti" script:language="StarBasic">Sub embedImagesInWriter(cFile)
+<script:module xmlns:script="http://openoffice.org/2000/script" script:name="Module1" script:language="StarBasic">Sub embedImagesInWriter(cFile)
     cURL = ConvertToURL( cFile )
     GlobalScope.BasicLibraries.LoadLibrary(&quot;Tools&quot;)
     oDoc = StarDesktop.loadComponentFromURL(cURL, &quot;_blank&quot;, 0, (_
@@ -44,5 +44,21 @@ Function MakePropertyValue( Optional cName As String, Optional uValue ) _
    EndIf
    MakePropertyValue() = oPropertyValue
 End Function
+
+Sub ReplaceNBHyphen(cFile)
+    cURL = ConvertToURL( cFile )
+    GlobalScope.BasicLibraries.LoadLibrary(&quot;Tools&quot;)
+    oDoc = StarDesktop.loadComponentFromURL(cURL, &quot;_blank&quot;, 0, Array()) 
+    sURL = ConvertToURL( oDoc.url )
+
+    oReplace = ThisComponent.createReplaceDescriptor()
+	oReplace.SearchCaseSensitive = True
+	oReplace.SearchString = chr(clng(&quot;&amp;H2011&quot;))
+	oReplace.ReplaceString = &quot;-&quot;
+	ThisComponent.ReplaceAll(oReplace)
+
+    oDoc.storeAsURL( sURL, Array())
+    oDoc.close( True )
+End Sub
 
 </script:module>

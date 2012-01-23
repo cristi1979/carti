@@ -42,3 +42,19 @@ Function MakePropertyValue( Optional cName As String, Optional uValue ) _
    EndIf
    MakePropertyValue() = oPropertyValue
 End Function
+
+Sub ReplaceNBHyphen(cFile)
+    cURL = ConvertToURL( cFile )
+    GlobalScope.BasicLibraries.LoadLibrary("Tools")
+    oDoc = StarDesktop.loadComponentFromURL(cURL, "_blank", 0, Array()) 
+    sURL = ConvertToURL( oDoc.url )
+
+    oReplace = ThisComponent.createReplaceDescriptor()
+	oReplace.SearchCaseSensitive = True
+	oReplace.SearchString = chr(clng("&H2011"))
+	oReplace.ReplaceString = "-"
+	ThisComponent.ReplaceAll(oReplace)
+
+    oDoc.storeAsURL( sURL, Array())
+    oDoc.close( True )
+End Sub
