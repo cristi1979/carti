@@ -420,9 +420,10 @@ sub get_html_from_wikisite {
 
 sub html_to_epub {
     my ($html_file, $book) = @_;
-    my ($name,$dir,$ext) = fileparse($book->{"file"}, qr/\.[^.]*/);
+    my ($name, $dir, $ext) = fileparse($book->{"file"}, qr/\.[^.]*/);
     my $authors = $book->{'auth'};
-    $name = "$authors$url_sep$name";
+    $name =  "$authors$url_sep$name";
+
     $dir = "$script_dir/AAA___epubs";
     Common::makedir("$dir");
     my $coperta = $book->{"coperta"} if defined $book->{"coperta"};
@@ -432,48 +433,58 @@ sub html_to_epub {
     push @tags, "lungi" if defined $book->{'lungi'};
     push @tags, "ver=".$book->{'ver'} if defined $book->{'ver'};
 
+    $book->{'title'} =~ s/\"/\\"/g;
+    my ($name_fix, $html_file_fix) = ($name, $html_file);
+    $name_fix =~ s/\"/\\"/g;
+    $html_file_fix =~ s/\"/\\"/g;
+# print Dumper($name_fix, $name);
     my $epub_parameters = "--disable-font-rescaling --minimum-line-height=0 --toc-threshold=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --authors=\"$authors\" --title=\"".$book->{'title'}."\"";
     $epub_parameters .= " --tags=".(join ',', @tags) if scalar @tags;
     $epub_parameters .= " --series=\"".$book->{'seria'}."\" --series-index=".$book->{'seria_no'} if defined $book->{'seria'} && defined $book->{'seria_no'};
     $epub_parameters .= " --cover=\"$coperta\"" if defined $coperta;
 
-    my ($out_file, $in_file, $output);
+    my ($out_file, $out_file_fix, $in_file, $output);
     ### normal epub
     print "Converting to epub.\n";
-    $in_file = "$html_file";
+    $in_file = "$html_file_fix";
+    $out_file_fix = "$dir/normal/$name_fix.epub";
     $out_file = "$dir/normal/$name.epub";
     Common::makedir("$dir/normal/");
-    $output = `$extra_tools_dir/calibre/ebook-convert \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover`;
+    $output = `$extra_tools_dir/calibre/ebook-convert \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover`;
     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
 
-    $in_file = "$out_file";
+    $in_file = "$out_file_fix";
     ### epub with external font
     print "Converting to epub with external font.\n";
+    $out_file_fix = "$dir/external/$name_fix.epub";
     $out_file = "$dir/external/$name.epub";
     Common::makedir("$dir/external/");
-    $output = `$extra_tools_dir/calibre/ebook-convert \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"`;
+    $output = `$extra_tools_dir/calibre/ebook-convert \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"`;
     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
 
     ### epub with embedded font
     print "Converting to epub with embedded font.\n";
     $out_file = "$dir/internal/$name.epub";
+    $out_file_fix = "$dir/internal/$name_fix.epub";
     Common::makedir("$dir/internal/");
-    $output = `$extra_tools_dir/calibre/ebook-convert \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"`;
-    Common::add_file_to_zip("$out_file", "$script_dir/tools/$font");
+    $output = `$extra_tools_dir/calibre/ebook-convert \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"`;
+    Common::add_file_to_zip($out_file, "$script_dir/tools/$font");
     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
 
     ### epub with ascii chars
     print "Converting to ascii epub.\n";
     $out_file = "$dir/ascii/".Common::normalize_text("$name.epub");
+    $out_file_fix = "$dir/ascii/".Common::normalize_text("$name_fix.epub");
     Common::makedir("$dir/ascii/");
-    $output = `$extra_tools_dir/calibre/ebook-convert \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover --asciiize`;
+    $output = `$extra_tools_dir/calibre/ebook-convert \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --asciiize`;
     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
 
     ### normal mobi
     print "Converting to mobi.\n";
     $out_file = "$dir/mobi/$name.mobi";
+    $out_file_fix = "$dir/mobi/$name_fix.mobi";
     Common::makedir("$dir/mobi/");
-    $output = `$extra_tools_dir/calibre/ebook-convert \"$in_file\" \"$out_file\" $epub_parameters`;
+    $output = `$extra_tools_dir/calibre/ebook-convert \"$in_file\" \"$out_file_fix\" $epub_parameters`;
     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
 
 #     ### mobi with ascii chars

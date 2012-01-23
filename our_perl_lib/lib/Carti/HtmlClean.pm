@@ -519,8 +519,8 @@ sub doc_find_unknown_elements {
     my $tree = shift;
     print "\tFind unknown elements.\n";
     foreach my $a_tag ($tree->descendants()) {
-	print "Unknown tag: ".$a_tag->tag."\n" if $a_tag->tag !~ m/^h[0-9]{1,2}$/ &&
-	      $a_tag->tag !~ m/^(head|meta|font|p|div|br|a|dd|dl|dt|title|i|img|span|sup|body|style|b|ul|li)$/;
+	die "Unknown tag: ".$a_tag->tag."\n" if $a_tag->tag !~ m/^h[0-9]{1,2}$/ &&
+	      $a_tag->tag !~ m/^(head|meta|font|p|div|br|a|dd|dl|dt|table|td|tr|title|i|img|span|sup|body|style|b|u|ul|ol|li|center|sub)$/;
     }
     return $tree;
 }
@@ -861,14 +861,18 @@ sub doc_tree_fix_paragraph {
 	    if ($attr_name eq "style") {
 		my @attr_values = split ';', $attr_value;
 		foreach my $attr_val (@attr_values) {
-		    if ($attr_val =~ m/^\s*margin-(top|bottom|left|right): ([0-9]+\.)?[0-9]+in\s*$/i
-			  || $attr_val =~ m/^\s*text-indent: -?([0-9]+\.)?[0-9]+in\s*$/i
+		    if ($attr_val =~ m/^\s*margin-(top|bottom|left|right): -?([0-9]+\.)?[0-9]+in\s*$/i
+			  || $attr_val =~ m/^\s*(text-indent|padding): -?([0-9]+\.)?[0-9]+in\s*$/i
 			  || $attr_val =~ m/^\s*line-height: [0-9]+%\s*$/i
 			  || $attr_val =~ m/^\s*(widows|orphans): [0-9]+\s*$/i
 			  || $attr_val =~ m/^\s*border-(top|bottom|left|right): .+\s*$/i
-			  || $attr_val =~ m/^\s*page-break-(after|before|inside): (avoid|always)\s*$/i
-			  || $attr_val =~ m/^\s*background: #[0-9a-f]{6}\s*$/i
+			  || $attr_val =~ m/^\s*text-decoration: none\s*$/i
+			  || $attr_val =~ m/^\s*border: (none|-?([0-9]+\.)?[0-9]+px solid #[0-9a-f]{6})\s*$/i
+			  || $attr_val =~ m/^\s*page-break-(after|before|inside): (avoid|always|auto)\s*$/i
+			  || $attr_val =~ m/^\s*background: (#[0-9a-f]{6}|transparent)\s*$/i
 			  || $attr_val =~ m/^\s*padding-(top|bottom|left|right): ([0-9]+\.)?[0-9]+in\s*$/i
+			  || $attr_val =~ m/^\s*padding: (([0-9]+\.)?[0-9]+in\s*)+$/i
+			  || $attr_val =~ m/^\s*line-height: ([0-9]+\.)?[0-9]+in\s*$/i
 			) {
 			$a_tag->attr($attr_name, undef);
 		    } elsif ($attr_val =~ m/^\s*font-(weight|style): normal\s*$/i) {
