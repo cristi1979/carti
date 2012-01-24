@@ -307,6 +307,7 @@ sub clean_html_from_oo {
     $html =~ s/\x{1e}/-/gsi;
     $html =~ s/\x{2}//gsi;
     my $tree = HtmlClean::get_tree($html);
+    my $enc = HtmlClean::doc_tree_find_encoding($tree);
 # Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
     $tree = HtmlClean::doc_tree_clean_defs($tree);
     $tree = HtmlClean::doc_tree_remove_TOC($tree);
@@ -326,9 +327,9 @@ sub clean_html_from_oo {
     $tree = HtmlClean::doc_tree_fix_center($tree);
     $tree = HtmlClean::doc_tree_clean_pre($tree);
     $tree = HtmlClean::wiki_tree_clean_body($tree);
-    $tree = HtmlClean::doc_tree_clean_sub($tree);
     $tree = HtmlClean::doc_tree_fix_paragraph($tree);
     $tree = HtmlClean::doc_tree_clean_css_from_oo($tree, $work_dir);
+    $tree = HtmlClean::doc_tree_clean_sub($tree);
     $tree = HtmlClean::doc_find_unknown_elements($tree);
     $html = $tree->as_HTML('<>&', "\t");
     $tree = $tree->delete;
@@ -412,6 +413,10 @@ sub libreoffice_to_epub {
     unlink $_ foreach (@$images);
     unlink $working_file;
     Common::write_file("$work_dir/$control_file", "file=$title\nmd5=".$book->{"md5"});
+    foreach (keys %$book) {
+	$book->{$_} = "" if ! defined $book->{$_};
+    }
+    Common::hash_to_xmlfile($book, "$work_dir/$control_file.xml");
 }
 
 sub import_html_to_wiki {

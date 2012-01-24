@@ -560,6 +560,40 @@ sub doc_tree_clean_defs {
     return $tree;
 }
 
+sub doc_tree_clean_sub {
+    my $tree = shift;
+    print "\tClean sub.\n";
+    $_->replace_with_content foreach ($tree->guts->look_down(_tag => 'sub'));
+    return $tree;
+}
+
+# sub doc_tree_clean_sub {
+#     my $tree = shift;
+#     print "\tClean empty sub.\n";
+#     foreach my $a_tag ($tree->guts->look_down(_tag => "sub")) {
+# 	$a_tag->replace_with_content if ($a_tag->as_text =~ m/^\s*$/);
+#     }
+#     return $tree;
+# }
+
+sub doc_tree_find_encoding {
+    my $tree = shift;
+    my $enc = "";
+    print "\tFind encoding.\n";
+    foreach my $a_tag ($tree->guts->look_down(_tag => 'META')){
+	if ( defined $a_tag->attr('HTTP-EQUIV') && $a_tag->attr('HTTP-EQUIV') eq "CONTENT-TYPE" ) {
+	    if (defined $a_tag->attr('CONTENT') && $a_tag->attr('CONTENT') =~ m/^text\/html; charset=utf-8$/ ){
+		$enc = "utf-8";
+		print "\t\tFound encoding: $enc.\n";
+		last;
+	    } else {
+		die "Unknown encoding: ".($a_tag->attr('CONTENT'))."\n";
+	    }
+	}
+    }
+    return $enc;
+}
+
 sub doc_tree_clean_h {
     my $tree = shift;
     print "\tClean headings.\n";
@@ -819,15 +853,6 @@ sub doc_tree_clean_b_i {
     }
     foreach my $a_tag ($tree->guts->look_down(_tag => "strong")) {
 	$a_tag->tag('b');
-    }
-    return $tree;
-}
-
-sub doc_tree_clean_sub {
-    my $tree = shift;
-    print "\tClean empty sub.\n";
-    foreach my $a_tag ($tree->guts->look_down(_tag => "sub")) {
-	$a_tag->replace_with_content if ($a_tag->as_text =~ m/^\s*$/);
     }
     return $tree;
 }
