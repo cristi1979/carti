@@ -567,6 +567,13 @@ sub doc_tree_clean_sub {
     return $tree;
 }
 
+sub doc_tree_clean_multicol {
+    my $tree = shift;
+    print "\tClean multicol.\n";
+    $_->replace_with_content foreach ($tree->guts->look_down(_tag => 'multicol'));
+    return $tree;
+}
+
 # sub doc_tree_clean_sub {
 #     my $tree = shift;
 #     print "\tClean empty sub.\n";

@@ -321,6 +321,7 @@ sub clean_html_from_oo {
     $tree = HtmlClean::doc_tree_clean_h($tree);
 # Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
     $tree = HtmlClean::doc_tree_clean_div($tree);
+    $tree = HtmlClean::doc_tree_clean_multicol($tree);
     $tree = HtmlClean::doc_tree_clean_b_i($tree);
     $tree = HtmlClean::doc_tree_remove_empty_list($tree);
     $tree = HtmlClean::doc_tree_clean_tables($tree);
