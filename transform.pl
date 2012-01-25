@@ -132,7 +132,8 @@ sub doc_to_html_macro {
 	die  if $os eq "windows";
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 600;
-	system("libreoffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
+	system("libreoffice", "--display", ":10235", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
+# 	system("libreoffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
 	alarm 0;
     };
     $status = $?;
@@ -309,14 +310,14 @@ sub clean_html_from_oo {
     my $tree = HtmlClean::get_tree($html);
     my $enc = HtmlClean::doc_tree_find_encoding($tree);
 # Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
-    $tree = HtmlClean::doc_tree_clean_defs($tree);
-    $tree = HtmlClean::doc_tree_remove_TOC($tree);
-    ($tree, $images) = HtmlClean::doc_tree_fix_links_from_oo($tree, $no_links);
-    $tree = HtmlClean::doc_tree_clean_color($tree) if $colors !~ m/^yes$/i;
     $tree = HtmlClean::doc_tree_clean_font($tree);
     $tree = HtmlClean::doc_tree_remove_empty_font($tree);
     $tree = HtmlClean::doc_tree_clean_span($tree);
     $tree = HtmlClean::doc_tree_remove_empty_span($tree);
+    $tree = HtmlClean::doc_tree_clean_defs($tree);
+    $tree = HtmlClean::doc_tree_remove_TOC($tree);
+    ($tree, $images) = HtmlClean::doc_tree_fix_links_from_oo($tree, $no_links);
+    $tree = HtmlClean::doc_tree_clean_color($tree) if $colors !~ m/^yes$/i;
     $tree = HtmlClean::doc_tree_clean_h($tree);
 # Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
     $tree = HtmlClean::doc_tree_clean_div($tree);
