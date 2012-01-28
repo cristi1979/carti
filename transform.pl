@@ -232,7 +232,7 @@ sub get_new_documents {
 	}
 	$auth =~ s/(&$)//g;
 	my ($ver, $series, $series_no, $coperta);
-	$coperta = "$dir/$book.jpg" if -f "$dir/$book.jpg";
+	$coperta = "$dir/$book.jpe?g" if -f "$dir/$book.jpg";
 	($ver, $book) = get_version($book);
 	($series, $series_no, $book) = get_series($book);
 	die "Book already exists: $auth$url_sep$book\n".Dumper($files_to_import->{"$auth$url_sep$book"}) if defined $files_to_import->{"$auth$url_sep$book"};
@@ -260,7 +260,7 @@ sub convert_images {
 	my $orig_name = $_;
 	my $new_name = $orig_images->{$_};
 	if (! -f "$work_dir/$orig_name") {
-	    die "Missing image $work_dir/$orig_name.\n";
+	    print "Missing image $work_dir/$orig_name.\n";
 	    next;
 	}
 	print "\tConverting file $orig_name to $new_name.\n";
@@ -318,7 +318,7 @@ sub clean_html_from_oo {
     $tree = HtmlClean::doc_tree_remove_TOC($tree);
     ($tree, $images) = HtmlClean::doc_tree_fix_links_from_oo($tree, $no_links);
     $tree = HtmlClean::doc_tree_clean_color($tree) if $colors !~ m/^yes$/i;
-    $tree = HtmlClean::doc_tree_clean_h($tree);
+    $tree = HtmlClean::doc_tree_clean_h($tree, 0);
 # Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
     $tree = HtmlClean::doc_tree_clean_div($tree);
     $tree = HtmlClean::doc_tree_clean_multicol($tree);
@@ -657,7 +657,7 @@ sub wiki_site_to_epub {
 # rm -rf ~/.libreoffice/
 # libreoffice -headless -invisible -nodefault -nologo -nofirststartwizard -norestore -convert-to swriter /dev/null
 # cp /home/cristi/programe/scripts/carti/tools/libreoffice/Standard/* ~/.libreoffice/3/user/basic/Standard/
-# libreoffice -headless -invisible -nocrashreport -nodefault -nologo -nofirststartwizard -norestore "macro:///Standard.Module1.embedImagesInWriter(/home/cristi/programe/scripts/carti/qq/index.html)"
+# libreoffice --headless --invisible --nocrashreport --nodefault --nologo --nofirststartwizard --norestore "macro:///Standard.Module1.embedImagesInWriter(/home/cristi/programe/scripts/carti/qq/index.html)"
 # http://user.services.openoffice.org/en/forum/viewtopic.php?f=20&t=23909
 #######   html to doc
 # libreoffice -infilter="HTML (StarWriter)" -convert-to "ODF Text Document" ./q/Poul\ Anderson/index.html

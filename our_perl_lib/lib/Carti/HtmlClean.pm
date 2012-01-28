@@ -603,7 +603,7 @@ sub doc_tree_find_encoding {
 }
 
 sub doc_tree_clean_h {
-    my $tree = shift;
+    my ($tree, $br_io_fix) = shift;
     print "\tClean headings.\n";
     my @delete_later = ();
     foreach my $a_tag ($tree->descendants()) {
@@ -627,7 +627,7 @@ sub doc_tree_clean_h {
 			$b_tag->tag eq "font" ||
 			$b_tag->tag eq "span" )  {
 		    $b_tag->replace_with_content;
-		} elsif ($b_tag->tag eq "br") {
+		} elsif ($b_tag->tag eq "br" && $br_io_fix) {
 		    $b_tag->tag('br_io');
 		}
 	    }
@@ -650,7 +650,7 @@ sub doc_tree_clean_h {
 # 			$$content_tag->delete;
 			$a_tag->preinsert($table);
 		    } else {
-			die "heading: ".$$content_tag->tag.".\n".$a_tag->as_HTML.".\n"  if ref $$content_tag;
+			die "heading: ".$$content_tag->tag.".\n".$a_tag->as_HTML.".\n"  if ref $$content_tag && $br_io_fix;
 		    }
 		} else {
 		    $$content_tag =~ s/^\s*([0-9]{1,}\.)+\s*//;
