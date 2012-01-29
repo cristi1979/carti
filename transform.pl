@@ -221,7 +221,7 @@ sub get_new_documents {
 	$file = abs_path($file);
 	print "$count\r" if ++$count % 10 == 0;
 	my ($book,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
-	return if $suffix =~ m/\.jpg/i;
+	return if $suffix =~ m/\.jpe?g/i;
 	my $auth = $dir;
 	$auth =~ s/^$docs_prefix\/([^\/]+).*$/$1/;
 	die "Autor necunoscut: ".Dumper($file) if $auth =~ m/^\s*$/;
@@ -232,7 +232,7 @@ sub get_new_documents {
 	}
 	$auth =~ s/(&$)//g;
 	my ($ver, $series, $series_no, $coperta);
-	$coperta = "$dir/$book.jpe?g" if -f "$dir/$book.jpg";
+	$coperta = "$dir/$book.jpg" if -f "$dir/$book.jpg";
 	($ver, $book) = get_version($book);
 	($series, $series_no, $book) = get_series($book);
 	die "Book already exists: $auth$url_sep$book\n".Dumper($files_to_import->{"$auth$url_sep$book"}) if defined $files_to_import->{"$auth$url_sep$book"};
@@ -397,13 +397,15 @@ sub libreoffice_to_epub {
     remove_tree("$work_dir") || die "Can't remove dir $work_dir: $!.\n" if -d "$work_dir";
     Common::makedir($work_dir);
     copy("$file", $working_file) or die "Copy failed $working_file: $!\n";
+    copy($book->{'coperta'}, $work_dir) or die "Copy failed ".$book->{'coperta'}.": $!\n";
 
     my $res = doc_to_html_macro("$working_file");
     my $html_file = "$work_dir/$name.html";
     if ($res || ! -s $html_file) {die "Can't generate html.\n";next;}
-    my ($html, $images) = clean_html_from_oo(Common::read_file("$html_file"), $work_dir);
+    my ($html, $images);
+    eval { ($html, $images) = clean_html_from_oo(Common::read_file("$html_file"), $work_dir)};
+    if ($?) {print Dumper($@);return;}
     $images = convert_images ($images, $work_dir);
-
     $book->{'scurte'} = 1 if (length($html) <= 35000);
     $book->{'medii'} = 1 if (length($html) >= 30000 && length($html) <= 450000);
     $book->{'lungi'} = 1 if (length($html) >= 400000);
