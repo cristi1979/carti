@@ -397,14 +397,15 @@ sub libreoffice_to_epub {
     remove_tree("$work_dir") || die "Can't remove dir $work_dir: $!.\n" if -d "$work_dir";
     Common::makedir($work_dir);
     copy("$file", $working_file) or die "Copy failed $working_file: $!\n";
-    copy($book->{'coperta'}, $work_dir) or die "Copy failed ".$book->{'coperta'}.": $!\n";
+    if (defined $book->{'coperta'}){copy($book->{'coperta'}, $work_dir) or die "Copy failed ".$book->{'coperta'}.": $!\n"};
 
     my $res = doc_to_html_macro("$working_file");
     my $html_file = "$work_dir/$name.html";
     if ($res || ! -s $html_file) {die "Can't generate html.\n";next;}
     my ($html, $images);
     eval { ($html, $images) = clean_html_from_oo(Common::read_file("$html_file"), $work_dir)};
-    if ($?) {print Dumper($@);return;}
+
+    if ($@) {print Dumper($@). "error: $?.\n";return;}
     $images = convert_images ($images, $work_dir);
     $book->{'scurte'} = 1 if (length($html) <= 35000);
     $book->{'medii'} = 1 if (length($html) >= 30000 && length($html) <= 450000);

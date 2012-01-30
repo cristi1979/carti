@@ -277,7 +277,7 @@ sub doc_tree_clean_tables {
     return $tree;
 }
 
-sub doc_tree_clean_pre {
+sub wiki_tree_clean_pre {
     my $tree = shift;
     print "\tClean pre.\n";
     foreach my $a_tag ($tree->guts->look_down(_tag => "pre")) {
@@ -292,11 +292,17 @@ sub doc_tree_clean_pre {
 		} else {
 		    $a_ref->push_content(['br']);
 		}
-# 		print "xxx $line xxx\n";exit 1;
 	    }
 	    $a_tag->replace_with( $a_ref );
 	}
     }
+    return $tree;
+}
+
+sub doc_tree_clean_pre {
+    my $tree = shift;
+    print "\tClean pre.\n";
+    $_->replace_with_content foreach ($tree->guts->look_down(_tag => "pre"));
     return $tree;
 }
 
