@@ -1,4 +1,3 @@
-
 package HtmlClean;
 
 use warnings;
@@ -277,9 +276,10 @@ sub doc_tree_clean_tables {
     return $tree;
 }
 
-sub wiki_tree_clean_pre {
+sub doc_tree_clean_pre {
     my $tree = shift;
     print "\tClean pre.\n";
+    die "\tActually I don't know what to do with pre.\n";
     foreach my $a_tag ($tree->guts->look_down(_tag => "pre")) {
 	foreach my $b_tag ($a_tag->content_refs_list){
 	    die "strange pre.\n" if ref $$b_tag;
@@ -296,13 +296,6 @@ sub wiki_tree_clean_pre {
 	    $a_tag->replace_with( $a_ref );
 	}
     }
-    return $tree;
-}
-
-sub doc_tree_clean_pre {
-    my $tree = shift;
-    print "\tClean pre.\n";
-    $_->replace_with_content foreach ($tree->guts->look_down(_tag => "pre"));
     return $tree;
 }
 
@@ -921,7 +914,7 @@ sub doc_tree_fix_paragraph {
 		}
 	    } elsif ($attr_name eq "align") {
 		die "\t\tUnknown value for align in paragraph: $attr_value.\n" if $attr_value !~ m/^(center|justify|left|right)$/i;
-	    } elsif ($attr_name eq "lang" || $attr_name eq "class") {
+	    } elsif ($attr_name eq "lang" || $attr_name eq "class" || $attr_name eq "dir") {
 		$a_tag->attr($attr_name, undef)
 	    } else {
 		die "\t\tUnknown attr in paragraph: $attr_name.\n";

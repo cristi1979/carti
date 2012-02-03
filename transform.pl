@@ -57,6 +57,7 @@ my $colors = "no";
 my $debug = 1;
 my $url_sep = " -- ";
 my $font = "BookmanOS.ttf";
+my $Xdisplay = ":12345";
 
 sub get_files_from_dir {
     my $dir_q = shift;
@@ -122,23 +123,25 @@ sub doc_to_html_macro {
     my $status;
     if ($first_time == 0) {
 	remove_tree($ENV{"HOME"} ."/.libreoffice/") || die "Can't remove dir ".$ENV{"HOME"}."/.libreoffice/: $!.\n" if -d $ENV{"HOME"} ."/.libreoffice/";
-	system("Xvfb :10235 -screen 0 1024x768x16 &> /dev/null &") if $os ne "windows";
+	system("Xvfb $Xdisplay -screen 0 1024x768x16 &> /dev/null &") if $os ne "windows";
 	system("libreoffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "libreoffice failed: $?";
 	copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", $ENV{"HOME"} ."/.libreoffice/3/user/basic/Standard/") or die "Copy failed libreoffice macros: $!\n";
 	$first_time++;
     }
 
+    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}')`;
     eval {
 	die  if $os eq "windows";
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 600;
-	system("libreoffice", "--display", ":10235", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
+	system("libreoffice", "--display", "$Xdisplay", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
 # 	system("libreoffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
 	alarm 0;
     };
     $status = $?;
     if ($status) {
 	printf "Error: Timed out: $status. Child exited with value %d\n", $status >> 8;
+        `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}')`;
     } else {
 	print "\tFinished with status: $status.\n";
     }
@@ -151,6 +154,7 @@ sub doc_to_html {
     my ($name,$dir,$suffix) = fileparse($doc_file, qr/\.[^.]*/);
     print "\t-Generating html file from $doc_file.\n";
     my $status;
+    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}')`;
     eval {
 	die  if $os eq "windows";
 	local $SIG{ALRM} = sub { die "alarm\n" };
@@ -161,16 +165,18 @@ sub doc_to_html {
     $status = $?;
     if ($status) {
 	printf "Error: Timed out: $status. Child exited with value %d\n", $status >> 8;
+	`kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}')`;
 	eval {
 	    local $SIG{ALRM} = sub { die "alarm\n" };
 	    alarm 600;
-	    system("Xvfb :10235 -screen 0 1024x768x16 &> /dev/null &") if $os ne "windows";
-	    system("libreoffice", "--display", ":10235", "--unnaccept=all", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "html:HTML (StarWriter)", "--outdir", "$dir", "$doc_file") == 0 or die "libreoffice failed: $?";
+	    system("Xvfb $Xdisplay -screen 0 1024x768x16 &> /dev/null &") if $os ne "windows";
+	    system("libreoffice", "--display", "$Xdisplay", "--unnaccept=all", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "html:HTML (StarWriter)", "--outdir", "$dir", "$doc_file") == 0 or die "libreoffice failed: $?";
 	    alarm 0;
 	};
 	$status = $?;
 	if ($status) {
 	    printf "Error: Timed out: $status. Child exited with value %d\n", $status >> 8;
+	    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}')`;
 	} else {
 	    print "\tFinished with status: $status.\n";
 	}
@@ -327,6 +333,7 @@ sub clean_html_from_oo {
     $tree = HtmlClean::doc_tree_clean_tables($tree);
 # Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
     $tree = HtmlClean::doc_tree_fix_center($tree);
+# Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
     $tree = HtmlClean::doc_tree_clean_pre($tree);
     $tree = HtmlClean::wiki_tree_clean_body($tree);
     $tree = HtmlClean::doc_tree_fix_paragraph($tree);
