@@ -279,8 +279,8 @@ sub doc_tree_clean_tables {
 sub doc_tree_clean_pre {
     my $tree = shift;
     print "\tClean pre.\n";
-    die "\tActually I don't know what to do with pre.\n";
     foreach my $a_tag ($tree->guts->look_down(_tag => "pre")) {
+	die "\tActually I don't know what to do with pre.\n";
 	foreach my $b_tag ($a_tag->content_refs_list){
 	    die "strange pre.\n" if ref $$b_tag;
 	    my $txt = $$b_tag;
@@ -664,6 +664,30 @@ sub doc_tree_clean_h {
     $_->delete foreach (@delete_later);
     return $tree;
 }
+
+sub doc_tree_fix_paragraphs_start {
+    my $tree = shift;
+    print "\tFix paragraph start.\n";
+    foreach my $a_tag ($tree->guts->look_down(_tag => "p")) {
+	foreach my $content_tag ($a_tag->content_refs_list) {
+	    last if ref $$content_tag;
+	    if ($$content_tag =~ m/^\s*[-\x{2015}]/i) {
+# 		print "Fixing ".($a_tag->as_text).").\n";
+		$$content_tag =~ s/^(\s*)[-\x{2015}]+\s*/$1\x{2014} /;
+		last;
+	    }
+	    die "Paragraph starts with : ".(encode_utf8($$content_tag)).":$$content_tag (".($a_tag->as_text).").\n" if
+# 		  $a_tag->as_text !~ m/^\s*[\p{L} 0-9 !@#$%^&*()\[\]{};'\\:"|,\.\/<>\?]/i &&
+# 		  $a_tag->as_text !~ m/^\s*\x{e2}\x{80}\x{94}/i &&
+		      $a_tag->as_text !~ m/^\s*(\x{2014}|\x{a9}|\x{25a0}|\x{2022}|\x{201c}|\x{201e})/i &&
+# 		      encode_utf8($$content_tag) !~ m/^\s*\x{e2}\x{80}\x{94}/i &&
+		      $a_tag->as_text !~ m/^\s*[\p{L} a-z0-9 !@#$%^&*()\[\]{};'\\:"|,\.\/<>\_?~`]/i &&
+		      $a_tag->as_text !~ m/^\s*$/i;
+	}
+    }
+    return $tree;
+}
+
 
 sub doc_tree_remove_empty_font {
     my $tree = shift;

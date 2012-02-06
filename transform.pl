@@ -54,6 +54,7 @@ my $bad_files_dir = "$docs_prefix/ab_aaa - RAU/";
 my $new_files_dir = "$docs_prefix/ac_noi/";
 
 my $colors = "no";
+my $make_epub = "no";
 my $debug = 1;
 my $url_sep = " -- ";
 my $font = "BookmanOS.ttf";
@@ -308,13 +309,15 @@ sub clean_html_from_oo {
     my ($html, $work_dir) = @_;
     my $images = ();
     my $no_links = 0;
-# my $i = 1;
+my $i = 1;
 # Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $html);
     ## this should be minus?
     $html =~ s/\x{1e}/-/gsi;
     $html =~ s/\x{2}//gsi;
     my $tree = HtmlClean::get_tree($html);
     my $enc = HtmlClean::doc_tree_find_encoding($tree);
+    ## start with fucking removing colors
+    $tree = HtmlClean::doc_tree_clean_color($tree) if $colors !~ m/^yes$/i;
 # Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
     $tree = HtmlClean::doc_tree_clean_font($tree);
     $tree = HtmlClean::doc_tree_remove_empty_font($tree);
@@ -323,7 +326,6 @@ sub clean_html_from_oo {
     $tree = HtmlClean::doc_tree_clean_defs($tree);
     $tree = HtmlClean::doc_tree_remove_TOC($tree);
     ($tree, $images) = HtmlClean::doc_tree_fix_links_from_oo($tree, $no_links);
-    $tree = HtmlClean::doc_tree_clean_color($tree) if $colors !~ m/^yes$/i;
     $tree = HtmlClean::doc_tree_clean_h($tree, 0);
 # Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
     $tree = HtmlClean::doc_tree_clean_div($tree);
@@ -333,12 +335,13 @@ sub clean_html_from_oo {
     $tree = HtmlClean::doc_tree_clean_tables($tree);
 # Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
     $tree = HtmlClean::doc_tree_fix_center($tree);
-# Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
-    $tree = HtmlClean::doc_tree_clean_pre($tree);
     $tree = HtmlClean::wiki_tree_clean_body($tree);
     $tree = HtmlClean::doc_tree_fix_paragraph($tree);
     $tree = HtmlClean::doc_tree_clean_css_from_oo($tree, $work_dir);
     $tree = HtmlClean::doc_tree_clean_sub($tree);
+Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
+#     $tree = HtmlClean::doc_tree_clean_pre($tree);
+    $tree = HtmlClean::doc_tree_fix_paragraphs_start($tree);
     $tree = HtmlClean::doc_find_unknown_elements($tree);
     $html = $tree->as_HTML('<>&', "\t");
     $tree = $tree->delete;
@@ -421,7 +424,7 @@ sub libreoffice_to_epub {
     Common::write_file("$html_file", HtmlClean::html_tidy($html));
     my $zip_file = "$work_dir/$title.zip";
     Common::add_file_to_zip("$zip_file", "$file");
-    html_to_epub("$html_file", $book);
+    html_to_epub("$html_file", $book) if $make_epub eq "yes";
     unlink $_ foreach (@$images);
     unlink $working_file;
     Common::write_file("$work_dir/$control_file", "file=$title\nmd5=".$book->{"md5"});
