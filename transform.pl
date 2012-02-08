@@ -138,13 +138,13 @@ sub doc_to_html_macro {
     }
 
     `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
-#     system("Xvfb $Xdisplay -screen 0 1024x768x16 &> /dev/null &") if $os ne "windows";
+    system("Xvfb $Xdisplay -screen 0 1024x768x16 &> /dev/null &") if $os ne "windows";
     eval {
 	die  if $os eq "windows";
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 600;
-# 	system("libreoffice", "--display", "$Xdisplay", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
-	system("soffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
+	system("soffice", "--display", "$Xdisplay", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
+# 	system("soffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
 	alarm 0;
     };
     $status = $?;
