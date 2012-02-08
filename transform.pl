@@ -29,11 +29,20 @@ use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 use HTML::Tidy;
 use URI::Escape;
+use Time::HiRes qw(usleep nanosleep);
+
+use threads;
+use threads::shared;
+use Thread::Semaphore;
+use Thread::Queue;
 
 use Carti::WikiWork;
 use Carti::HtmlClean;
 use Carti::Common;
 use Carti::WikiTxtClean;
+
+my $DataQueue = Thread::Queue->new();
+my $max_html_parse_threads = 6;
 
 my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
 my $extra_tools_dir = "$script_dir/tools";
@@ -44,17 +53,16 @@ my $our_wiki;
 my $workign_mode = shift;
 my $docs_prefix = shift;
 $docs_prefix = abs_path($docs_prefix);
-my $work_prefix = "work_wiki";
+my $work_prefix = "work";
 my $duplicate_file = "$script_dir/duplicate_files";
 our $duplicate_files = {};
-my $control_file = "doc_info_file.txt";
+my $control_file = "doc_info_file.xml";
 
 my $good_files_dir = "$docs_prefix/aaa_aaa/";
 my $bad_files_dir = "$docs_prefix/ab_aaa - RAU/";
 my $new_files_dir = "$docs_prefix/ac_noi/";
 
 my $colors = "no";
-my $make_epub = "no";
 my $debug = 1;
 my $url_sep = " -- ";
 my $font = "BookmanOS.ttf";
@@ -124,13 +132,13 @@ sub doc_to_html_macro {
     my $status;
     if ($first_time == 0) {
 	remove_tree($ENV{"HOME"} ."/.libreoffice/") || die "Can't remove dir ".$ENV{"HOME"}."/.libreoffice/: $!.\n" if -d $ENV{"HOME"} ."/.libreoffice/";
-	system("Xvfb $Xdisplay -screen 0 1024x768x16 &> /dev/null &") if $os ne "windows";
 	system("libreoffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "libreoffice failed: $?";
 	copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", $ENV{"HOME"} ."/.libreoffice/3/user/basic/Standard/") or die "Copy failed libreoffice macros: $!\n";
 	$first_time++;
     }
 
-    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}')`;
+    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
+    system("Xvfb $Xdisplay -screen 0 1024x768x16 &> /dev/null &") if $os ne "windows";
     eval {
 	die  if $os eq "windows";
 	local $SIG{ALRM} = sub { die "alarm\n" };
@@ -142,7 +150,7 @@ sub doc_to_html_macro {
     $status = $?;
     if ($status) {
 	printf "Error: Timed out: $status. Child exited with value %d\n", $status >> 8;
-        `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}')`;
+        `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
     } else {
 	print "\tFinished with status: $status.\n";
     }
@@ -155,7 +163,7 @@ sub doc_to_html {
     my ($name,$dir,$suffix) = fileparse($doc_file, qr/\.[^.]*/);
     print "\t-Generating html file from $doc_file.\n";
     my $status;
-    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}')`;
+    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
     eval {
 	die  if $os eq "windows";
 	local $SIG{ALRM} = sub { die "alarm\n" };
@@ -166,7 +174,7 @@ sub doc_to_html {
     $status = $?;
     if ($status) {
 	printf "Error: Timed out: $status. Child exited with value %d\n", $status >> 8;
-	`kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}')`;
+	`kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
 	eval {
 	    local $SIG{ALRM} = sub { die "alarm\n" };
 	    alarm 600;
@@ -177,7 +185,7 @@ sub doc_to_html {
 	$status = $?;
 	if ($status) {
 	    printf "Error: Timed out: $status. Child exited with value %d\n", $status >> 8;
-	    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}')`;
+	    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
 	} else {
 	    print "\tFinished with status: $status.\n";
 	}
@@ -187,17 +195,18 @@ sub doc_to_html {
 }
 
 sub get_existing_documents {
+    my $new_files = shift;
     our $files_already_imported = {};
     my $work_dir = "$script_dir/$work_prefix/";
     die "Working dir $work_dir is a file.\n" if -f $work_dir;
     print "Get already done files from $work_dir.\n";
-    return if ! -d $work_dir;
+    Common::makedir($work_dir);
     $work_dir = abs_path("$script_dir/$work_prefix/");
     opendir(DIR, "$work_dir") || die("Cannot open directory $work_dir.\n");
     my @alldirs = grep { (!/^\.\.?$/) && -d "$work_dir/$_" } readdir(DIR);
     closedir(DIR);
     foreach my $dir (sort @alldirs) {
-	print "Found document $dir.\n";
+# 	print "Found document $dir.\n";
 	my $title = $dir;
 	$dir = "$work_dir/$dir";
 	if (! -f "$dir/$control_file"){
@@ -205,19 +214,23 @@ sub get_existing_documents {
 	    remove_tree("$dir") || die "Can't remove dir $dir: $!.\n";
 	    next;
 	}
-	open(FILE, "<:encoding(UTF-8)", "$dir/$control_file");
-	my @info_text = <FILE>;
-	close FILE;
-	chomp(@info_text);
-	if ( @info_text != 2 ) {
-	    print "\tFile $dir/$control_file does not have the correct number of entries.\n";
-	    remove_tree("$dir") || die "Can't remove dir $dir: $!.\n";
-	    next;
+
+	my $book_info = Common::xmlfile_to_hash("$dir/$control_file");
+
+	foreach my $key (keys %$book_info){
+	    my $tmp = $book_info->{$key};
+	    $new_files->{$title}->{$key} = $book_info->{$key} if ! defined $new_files->{$title}->{$key};
 	}
-	my $md5 = $info_text[1]; $md5 =~ s/(.*?)=\s*//;
-	$files_already_imported->{$title} = $md5;
+	$files_already_imported->{$title} = 0;
+	if ( defined $book_info->{"libreoffice"} && $book_info->{"libreoffice"} eq "done" &&
+	  $book_info->{"md5"} eq $new_files->{$title}->{"md5"}) {
+	    $files_already_imported->{$title} = $book_info->{"md5"}
+	} else {
+	    print "Remove wrong dir $dir.\n";
+	    remove_tree("$dir") || die "Can't remove dir $dir: $!.\n";
+	}
     }
-    return $files_already_imported;
+    return ($files_already_imported, $new_files);
 }
 
 sub get_new_documents {
@@ -309,7 +322,7 @@ sub clean_html_from_oo {
     my ($html, $work_dir) = @_;
     my $images = ();
     my $no_links = 0;
-my $i = 1;
+# my $i = 1;
 # Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $html);
     ## this should be minus?
     $html =~ s/\x{1e}/-/gsi;
@@ -339,7 +352,7 @@ my $i = 1;
     $tree = HtmlClean::doc_tree_fix_paragraph($tree);
     $tree = HtmlClean::doc_tree_clean_css_from_oo($tree, $work_dir);
     $tree = HtmlClean::doc_tree_clean_sub($tree);
-Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
+# Common::write_file("./".$i++." html.html", $tree->as_HTML('<>&', "\t"));
 #     $tree = HtmlClean::doc_tree_clean_pre($tree);
     $tree = HtmlClean::doc_tree_fix_paragraphs_start($tree);
     $tree = HtmlClean::doc_find_unknown_elements($tree);
@@ -399,39 +412,72 @@ sub import_to_wiki {
 }
 
 sub libreoffice_to_epub {
-    my $book = shift;
+    my ($book, $mode) = @_;
+    return if defined $book->{"epub"} && $book->{"epub"} eq "done";
     my ($file, $title) =($book->{"file"}, $book->{"title"});
     my ($name,$dir,$ext) = fileparse(Common::normalize_text($file), qr/\.[^.]*/);
     my $work_dir = "$script_dir/$work_prefix/".($book->{"auth"})."$url_sep$title";
     my $working_file = "$work_dir/$name$ext";
-    remove_tree("$work_dir") || die "Can't remove dir $work_dir: $!.\n" if -d "$work_dir";
-    Common::makedir($work_dir);
-    copy("$file", $working_file) or die "Copy failed $working_file: $!\n";
-    if (defined $book->{'coperta'}){copy($book->{'coperta'}, $work_dir) or die "Copy failed ".$book->{'coperta'}.": $!\n"};
-
-    my $res = doc_to_html_macro("$working_file");
     my $html_file = "$work_dir/$name.html";
-    if ($res || ! -s $html_file) {die "Can't generate html.\n";next;}
-    my ($html, $images);
-    eval { ($html, $images) = clean_html_from_oo(Common::read_file("$html_file"), $work_dir)};
+    my $html_file_orig = "$work_dir/$name"."_orig.html";
+    my $html_file_clean = "$work_dir/$name"."_clean.html";
+    my $work;
+    print "****************** Working $mode for $title.\n";
 
-    if ($@) {print Dumper($@). "error: $?.\n";return;}
-    $images = convert_images ($images, $work_dir);
-    $book->{'scurte'} = 1 if (length($html) <= 35000);
-    $book->{'medii'} = 1 if (length($html) >= 30000 && length($html) <= 450000);
-    $book->{'lungi'} = 1 if (length($html) >= 400000);
+    $work = 0;
+    eval{
+    if (($mode eq "html") && !(defined $book->{"libreoffice"} && $book->{"libreoffice"} eq "done")) {
+	print "Doing the doc to html conversion.\n";
+	remove_tree("$work_dir") || die "Can't remove dir $work_dir: $!.\n" if -d "$work_dir";
+	Common::makedir($work_dir);
+	copy("$file", $working_file) or die "Copy failed $working_file: $!\n";
+	if (defined $book->{'coperta'}){copy($book->{'coperta'}, $work_dir) or die "Copy failed ".$book->{'coperta'}.": $!\n"};
+	my $res = doc_to_html_macro("$working_file");
+	if ($res || ! -s $html_file) {print "Can't generate html.\n"; return;};
+	move("$html_file", "$html_file_orig") || die "can't move file $html_file.\n";
+	my $zip_file = "$work_dir/$title.zip";
+	Common::add_file_to_zip("$zip_file", "$file");
+	unlink $working_file || die "Can't remove file $working_file: $!\n";
+	$book->{"libreoffice"} = "done";
+	$work++;
+    }};
+    if ($@) {print Dumper($@). "error: $?.\n"; return;};
+    $DataQueue->enqueue($book) if ($mode eq "html") ;
+    Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
+    return if $mode eq "html";
 
-    Common::write_file("$html_file", HtmlClean::html_tidy($html));
-    my $zip_file = "$work_dir/$title.zip";
-    Common::add_file_to_zip("$zip_file", "$file");
-    html_to_epub("$html_file", $book) if $make_epub eq "yes";
-    unlink $_ foreach (@$images);
-    unlink $working_file;
-    Common::write_file("$work_dir/$control_file", "file=$title\nmd5=".$book->{"md5"});
-    foreach (keys %$book) {
-	$book->{$_} = "" if ! defined $book->{$_};
-    }
-    Common::hash_to_xmlfile($book, "$work_dir/$control_file.xml");
+    $work = 0;
+    eval {
+    if (($mode eq "epub") && !(defined $book->{"html_clean"} && $book->{"html_clean"} eq "done"  && -s $html_file_clean)) {
+	print "Doing the html cleanup.\n";
+	my ($html, $images) = clean_html_from_oo(Common::read_file("$html_file_orig"), $work_dir);
+	$images = convert_images ($images, $work_dir);
+	$book->{'scurte'} = 1 if (length($html) <= 35000);
+	$book->{'medii'} = 1 if (length($html) >= 30000 && length($html) <= 450000);
+	$book->{'lungi'} = 1 if (length($html) >= 400000);
+	Common::write_file("$html_file_clean", HtmlClean::html_tidy($html));
+	unlink "$html_file_orig" || die "Can't remove file $html_file_orig: $!\n";
+	$book->{"html_clean"} = "done";
+	$work++;
+    }};
+    if ($@) {print Dumper($@). "error: $?.\n"; return;};
+    Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
+
+    $work = 0;
+    eval {
+    if ($mode eq "epub" && -s $html_file_clean) {
+	print "Doing the epub.\n";
+	opendir(DIR, "$work_dir");
+	my @images = grep(/\.jpg$/,readdir(DIR));
+	closedir(DIR);
+	html_to_epub("$html_file_clean", $book);
+	$book->{"epub"} = "done";
+	unlink "$work_dir/$_" foreach (@images);
+	unlink "$html_file_clean" || die "Can't remove file $html_file_clean: $!\n";
+	$work++;
+    }};
+    if ($@) {print Dumper($@). "error: $?.\n"; return;};
+    Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
 }
 
 sub import_html_to_wiki {
@@ -487,10 +533,10 @@ sub html_to_epub {
     my ($name_fix, $html_file_fix) = ($name, $html_file);
     $name_fix =~ s/\"/\\"/g;
     $html_file_fix =~ s/\"/\\"/g;
-# print Dumper($name_fix, $name);
+
     my $epub_parameters = "--disable-font-rescaling --minimum-line-height=0 --toc-threshold=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --authors=\"$authors\" --title=\"".$book->{'title'}."\"";
-    $epub_parameters .= " --tags=".(join ',', @tags) if scalar @tags;
-    $epub_parameters .= " --series=\"".$book->{'seria'}."\" --series-index=".$book->{'seria_no'} if defined $book->{'seria'} && defined $book->{'seria_no'};
+    $epub_parameters .= " --tags=\"".(join ',', @tags)."\"" if scalar @tags;
+    $epub_parameters .= " --series=\"".$book->{'seria'}."\" --series-index=\".$book->{'seria_no'}"."\"" if defined $book->{'seria'} && defined $book->{'seria_no'};
     $epub_parameters .= " --cover=\"$coperta\"" if defined $coperta;
 
     my ($out_file, $out_file_fix, $in_file, $output);
@@ -554,22 +600,14 @@ sub html_to_epub {
 #  -   --rating=between 1 and 5
 
 sub synchronize_files {
-    my $files_already_imported = get_existing_documents;
-    print "\tDone.\n";
-    my $files_to_import = get_new_documents;
+#     my $files_to_import = get_new_documents;
+    my ($files_already_imported, $files_to_import) = get_existing_documents (get_new_documents);
     print "\tDone.\n";
     my @arr1 = (keys %$files_already_imported);
     my @arr2 = (keys %$files_to_import);
     my ($only_in1, $only_in2, $common) = Common::array_diff(\@arr1, \@arr2);
     ## should delete $only_in1
     remove_tree("$script_dir/$work_prefix/$_") foreach (@$only_in1);
-
-    foreach (@$common){
-	if ($files_already_imported->{$_} eq $files_to_import->{$_}->{"md5"}){
-	    delete $files_already_imported->{$_};
-	    delete $files_to_import->{$_};
-	}
-    }
     return $files_to_import;
 }
 
@@ -616,14 +654,12 @@ sub clean_files {
     @tmp1 = (keys %$new_files);
     @tmp2 = (keys %$old_bad_files);
     ($only_in1, $only_in2, $common) = Common::array_diff(\@tmp1, \@tmp2);
-# print "Duplicate file: ".$new_files->{$_}." is the same as\n". $old_bad_files->{$_} . "\n" foreach (@$common);
     $duplicate_files->{$new_files->{$_}} = 1 foreach (@$common);
 
     ## compare new files with good files
     @tmp1 = (keys %$good_files);
     @tmp2 = (keys %$new_files);
     ($only_in1, $only_in2, $common) = Common::array_diff(\@tmp1, \@tmp2);
-# print "Duplicate file: ".$new_files->{$_}." is the same as\n". $good_files->{$_} . "\n" foreach (@$common);
     $duplicate_files->{$new_files->{$_}} = 1 foreach (@$common);
 
     Common::hash_to_xmlfile( $duplicate_files, $duplicate_file );
@@ -631,8 +667,6 @@ sub clean_files {
 	my $file = decode_utf8($key);
 	next, die "Dissapeared: $key\n" if ! -f $key;
 	my ($name,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
-# 	$dir = decode_utf8($dir);
-# 	print "mkdir -p \"\$BAD/$dir\";\nmv \"$key\" \"\$BAD/$dir\"\n";
 	Common::makedir("$docs_prefix/duplicate/$dir/");
 	move("$key", "$docs_prefix/duplicate/$dir/") || die "can't move duplicate file\n\t$key.\n";
 	print Dumper("duplicate ".$file);
@@ -641,8 +675,6 @@ sub clean_files {
 
 sub wiki_site_to_epub {
     foreach my $book (sort @{$our_wiki->wiki_get_all_pages}) {
-    #     $book = Encode::encode('utf8', $book);
-    # next if lc($book) lt "t";
 	my $work_dir = "$script_dir/$work_prefix/$book";
 	next if -d "$work_dir";
 	print "Start working for ".Encode::encode('utf8', $book).".\n";
@@ -654,14 +686,86 @@ sub wiki_site_to_epub {
     }
 }
 
-#     wikiweb_to_odt
-#     odt/wikiweb_to_pdf
-#     odt_to_rtf
-#     odt_to_doc
-#     odt_to_docx
-# extract_html();
-# wikiweb_to_html;
+sub ri_html_to_epub {
+#     use Encode;
+    my $html_file = $docs_prefix;
+    my $html = Common::read_file("$html_file");
+    my $images = ();
+    $html = Encode::decode("iso-8859-1", $html);
 
+    ($html, $images) = clean_html_ms ($html);
+    print Dumper($images);
+    Common::write_file(encode_utf8("__"."$html_file"), HtmlClean::html_tidy($html));
+}
+
+sub slave_threading {
+    my $threads;
+    my $running_thrd = 0;
+    my $total_threads = 0;
+    print "Starting threads for html clean and epub.\n";
+    while (1) {
+	my $DataElement = $DataQueue->peek;
+	last if defined $DataElement && $DataElement eq 'undef';
+	if (defined $DataElement && $running_thrd < $max_html_parse_threads){
+	    $total_threads++;
+	    $DataQueue->dequeue;
+	    my $name = $DataElement->{'title'};
+	    print "\t\t$total_threads ===starting thread $name\n";
+	    my $t = threads->new(\&libreoffice_to_epub, $DataElement, "epub");
+	    $running_thrd++;
+	    $threads->{$name} = $t;
+	    print "\t\t$total_threads ***running threads $running_thrd\n";
+	} else {
+	    usleep(300000);
+	}
+	foreach my $thr (keys %$threads) {
+	    if ($threads->{$thr}->is_joinable()) {
+		$threads->{$thr}->join();
+		delete $threads->{$thr};
+		$running_thrd--;
+		print "\t\t$total_threads ---done with $thr\n";
+	    }
+	}
+    }
+    print "Done, waiting for last threads.\n";
+    foreach my $thr (keys %$threads) {
+	my $num = $threads->{$thr}->join();
+	print "\t\t$total_threads ---done with $thr\n";
+    }
+    print "FIN ($running_thrd)*******************.\n";
+}
+
+sub transformer {
+    my $files_to_import = synchronize_files;
+    my $total = scalar (keys %$files_to_import);
+    my $crt = 1;
+    my $t = threads->new(\&slave_threading);
+
+    foreach my $file (sort keys %$files_to_import) {
+	my $type = $files_to_import->{$file}->{"type"};
+	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) {
+	    print "start working for book $file: $crt out of $total.\n";
+	    my ($html, $images) = libreoffice_to_epub($files_to_import->{$file}, "html");
+# 	    import_html_to_wiki($html, $images, $files_to_import->{$file});
+# 	} elsif ($type =~ m/\.html?$/i) {
+	} elsif ($type =~ m/\.pdf$/i) {
+# 	} elsif ($type =~ m/\.epub$/i) {
+# 	} elsif ($type =~ m/\.zip$/i) {
+	} else {
+	    print Dumper($files_to_import->{$file})."\nUnknown file type: $type.\n";
+	}
+	$crt++;
+    }
+    $t->join();
+}
+
+if ($workign_mode eq "-ri") {
+    ri_html_to_epub();
+} elsif ($workign_mode eq "-clean") {
+    clean_files();
+} elsif ($workign_mode eq "-html" || $workign_mode eq "-epub") {
+    transformer();
+}
 
 
 #######   epub to big html
@@ -674,46 +778,3 @@ sub wiki_site_to_epub {
 # http://user.services.openoffice.org/en/forum/viewtopic.php?f=20&t=23909
 #######   html to doc
 # libreoffice -infilter="HTML (StarWriter)" -convert-to "ODF Text Document" ./q/Poul\ Anderson/index.html
-
-# find ./work_carti/ -iname \*.epub -print0 | grep -zZ \/ascii\/ | xargs -0 -I {} cp "{}" ./epub_ascii
-if ($workign_mode eq "-ri") {
-    use Encode;
-    my $html_file = $docs_prefix;
-    my $html = Common::read_file("$html_file");
-    my $images = ();
-    $html = Encode::decode("iso-8859-1", $html);
-
-    ($html, $images) = clean_html_ms ($html);
-    print Dumper($images);
-    #if (Encode::is_utf8($html,Encode::FB_CROAK) ){print "1\n"}else {print "2\n"};
-    Common::write_file(encode_utf8("__"."$html_file"), HtmlClean::html_tidy($html));
-    #html_to_epub ($html_file);
-} elsif ($workign_mode eq "-c") {
-    clean_files();
-} elsif ($workign_mode eq "-w" || $workign_mode eq "-e") {
-    my $files_to_import = synchronize_files;
-    my $total = scalar (keys %$files_to_import);
-    my $crt = 1;
-    foreach my $file (sort keys %$files_to_import) {
-	my $type = $files_to_import->{$file}->{"type"};
-
-#       || $type =~ m/\.txt$/i
-#     if ($suffix =~ m/^\.txt$/i) {
-# 	`iconv -f cp1250 -t utf-8 "$doc_file" > "$dir/utf_$name$suffix"` if $os ne "windows";
-# 	move("$dir/utf_$name$suffix", "$doc_file") || die "can't move file.\n";
-#     }
-	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) {
-# 	    print "$type: start working for book $file: $crt out of $total.\n";
-	    my ($html, $images) = libreoffice_to_epub($files_to_import->{$file}) if $workign_mode eq "-e";
-	    import_html_to_wiki($html, $images, $files_to_import->{$file}) if $workign_mode eq "-w";
-	} elsif ($type =~ m/\.html?$/i) {
-	} elsif ($type =~ m/\.pdf$/i) {
-	} elsif ($type =~ m/\.epub$/i) {
-	} elsif ($type =~ m/\.zip$/i) {
-	} else {
-	    print Dumper($files_to_import->{$file})."\nUnknown file type: $type.\n";
-	}
-	$crt++;
-    }
-}
-

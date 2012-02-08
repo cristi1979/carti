@@ -17,19 +17,23 @@ use XML::Simple;
 sub xmlfile_to_hash {
     my $file = shift;
     my $xml = new XML::Simple;
-    return $xml->XMLin("$file");
+    return $xml->XMLin("$file", SuppressEmpty => 1);
 }
 
 sub hash_to_xmlfile {
     my ($hash, $name, $root_name) = @_;
     $root_name = "out" if ! defined $root_name;
+    $hash->{$_} = Encode::decode('utf8', $hash->{$_}) foreach (keys %$hash);
+
     my $xs = new XML::Simple();
     unlink $name;
     my $xml = $xs->XMLout($hash,
 		    NoAttr => 1,
 		    RootName=>$root_name,
-		    OutputFile => $name
+		    OutputFile => $name,
+		    SuppressEmpty => 1
 		    );
+    $hash->{$_} = Encode::encode('utf8', $hash->{$_}) foreach (keys %$hash);
 }
 
 sub get_file_md5 {
