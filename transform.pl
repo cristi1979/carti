@@ -125,15 +125,17 @@ sub get_series {
 }
 
 my $first_time = 0;
+my $libreoo_path = "/opt/libreoffice3.5/program/soffice";
+my $libreoo_home = $ENV{"HOME"}.".config/libreoffice/";
 sub doc_to_html_macro {
     my $doc_file = shift;
     my ($name,$dir,$suffix) = fileparse($doc_file, qr/\.[^.]*/);
     print "\t-Generating html file from $doc_file.\n";
     my $status;
     if ($first_time == 0) {
-	remove_tree($ENV{"HOME"} ."/.config/libreoffice/") || die "Can't remove dir ".$ENV{"HOME"}."/.libreoffice/: $!.\n" if -d $ENV{"HOME"} ."/.libreoffice/";
-	system("soffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "libreoffice failed: $?";
-	copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", $ENV{"HOME"} ."/.config/libreoffice/3/user/basic/Standard/") or die "Copy failed libreoffice macros: $!\n";
+	remove_tree("$libreoo_home") || die "Can't remove dir $libreoo_home: $!.\n" if -d "$libreoo_home";
+	system("$libreoo_path", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "libreoffice failed: $?";
+	copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", "$libreoo_home/3/user/basic/Standard/") or die "Copy failed libreoffice macros: $!\n";
 	$first_time++;
     }
 
@@ -143,8 +145,8 @@ sub doc_to_html_macro {
 	die  if $os eq "windows";
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 600;
-	system("soffice", "--display", "$Xdisplay", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
-# 	system("soffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
+	system("$libreoo_path", "--display", "$Xdisplay", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
+# 	system("$libreoo_path", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
 	alarm 0;
     };
     $status = $?;
@@ -179,7 +181,7 @@ sub doc_to_html {
 	    local $SIG{ALRM} = sub { die "alarm\n" };
 	    alarm 600;
 	    system("Xvfb $Xdisplay -screen 0 1024x768x16 &> /dev/null &") if $os ne "windows";
-	    system("libreoffice", "--display", "$Xdisplay", "--unnaccept=all", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "html:HTML (StarWriter)", "--outdir", "$dir", "$doc_file") == 0 or die "libreoffice failed: $?";
+	    system("$libreoo_path", "--display", "$Xdisplay", "--unnaccept=all", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "html:HTML (StarWriter)", "--outdir", "$dir", "$doc_file") == 0 or die "libreoffice failed: $?";
 	    alarm 0;
 	};
 	$status = $?;
