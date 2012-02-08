@@ -769,6 +769,7 @@ sub transformer {
 	}
 	$crt++;
     }
+    DataQueue->enqueue('undef');
     $t->join();
 }
 
