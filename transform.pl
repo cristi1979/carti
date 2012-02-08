@@ -463,6 +463,7 @@ sub libreoffice_to_epub {
     if (($mode eq "epub") && !(defined $book->{"html_clean"} && $book->{"html_clean"} eq "done"  && -s $html_file_clean)) {
 	print "Doing the html cleanup.\n";
 	my ($html, $images) = clean_html_from_oo(Common::read_file("$html_file_orig"), $work_dir);
+	$html =~ s/&shy;//g;
 	$images = convert_images ($images, $work_dir);
 	$book->{'scurte'} = 1 if (length($html) <= 35000);
 	$book->{'medii'} = 1 if (length($html) >= 30000 && length($html) <= 450000);
@@ -769,7 +770,7 @@ sub transformer {
 	}
 	$crt++;
     }
-    DataQueue->enqueue('undef');
+    $DataQueue->enqueue('undef');
     $t->join();
 }
 
