@@ -238,9 +238,20 @@ sub get_new_documents {
     our $count = 0;
     sub add_document {
 	my $file = shift;
-	$file = abs_path($file);
 	print "$count\r" if ++$count % 10 == 0;
+	$file = abs_path($file);
 	my ($book,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
+	if ($book =~ m/(^\s+|\s+$|\s{2,})/ || $suffix ne lc($suffix)){
+	    my $tmp1 = $book;
+	    $tmp1 =~ s/(^\s+|\s+$)//i;
+	    $tmp1 =~ s/\s+/ /ig;
+	    my $tmp2 = $suffix;
+	    $tmp2 = lc($suffix);
+	    print "$book$suffix. ==> .$tmp1$tmp2.\n";
+	    move("$dir/$book$suffix", "$dir/$tmp1$tmp2") || die "can't move file $book$suffix.\n";
+	    $book = $tmp1;
+	    $suffix = $tmp2;
+	}
 	return if $suffix =~ m/\.jpe?g/i;
 	my $auth = $dir;
 	$auth =~ s/^$docs_prefix\/([^\/]+).*$/$1/;
