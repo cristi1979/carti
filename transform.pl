@@ -559,8 +559,8 @@ sub html_to_epub {
     $out_file_fix = "$dir/normal/$name_fix.epub";
     $out_file = "$dir/normal/$name.epub";
     Common::makedir("$dir/normal/");
-    $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover`;
-    die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
+#     $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover`;
+#     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
 
     $in_file = "$out_file_fix";
     ### epub with external font
@@ -576,17 +576,17 @@ sub html_to_epub {
     $out_file = "$dir/internal/$name.epub";
     $out_file_fix = "$dir/internal/$name_fix.epub";
     Common::makedir("$dir/internal/");
-    $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"`;
-    Common::add_file_to_zip($out_file, "$script_dir/tools/$font");
-    die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
+#     $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"`;
+#     Common::add_file_to_zip($out_file, "$script_dir/tools/$font");
+#     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
 
     ### epub with ascii chars
     print "Converting to ascii epub.\n";
     $out_file = "$dir/ascii/".Common::normalize_text("$name.epub");
     $out_file_fix = "$dir/ascii/".Common::normalize_text("$name_fix.epub");
     Common::makedir("$dir/ascii/");
-    $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --asciiize`;
-    die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
+#     $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --asciiize`;
+#     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
 
     ### normal mobi
     print "Converting to mobi.\n";
