@@ -249,6 +249,7 @@ sub get_new_documents {
 	    $tmp2 = lc($suffix);
 	    print "$book$suffix. ==> .$tmp1$tmp2.\n";
 	    move("$dir/$book$suffix", "$dir/$tmp1$tmp2") || die "can't move file $book$suffix.\n";
+	    $file = "$dir/$tmp1$tmp2";
 	    $book = $tmp1;
 	    $suffix = $tmp2;
 	}
