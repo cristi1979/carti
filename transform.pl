@@ -131,9 +131,9 @@ sub doc_to_html_macro {
     print "\t-Generating html file from $doc_file.\n";
     my $status;
     if ($first_time == 0) {
-	remove_tree($ENV{"HOME"} ."/.libreoffice/") || die "Can't remove dir ".$ENV{"HOME"}."/.libreoffice/: $!.\n" if -d $ENV{"HOME"} ."/.libreoffice/";
-	system("soffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "libreoffice failed: $?";
-	copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", $ENV{"HOME"} ."/.libreoffice/3/user/basic/Standard/") or die "Copy failed libreoffice macros: $!\n";
+	remove_tree($ENV{"HOME"} ."/.config/libreoffice/") || die "Can't remove dir ".$ENV{"HOME"}."/.libreoffice/: $!.\n" if -d $ENV{"HOME"} ."/.libreoffice/";
+	system("libreoffice3.5", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "libreoffice failed: $?";
+	copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", $ENV{"HOME"} ."/.config/libreoffice/3/user/basic/Standard/") or die "Copy failed libreoffice macros: $!\n";
 	$first_time++;
     }
 
@@ -144,7 +144,7 @@ sub doc_to_html_macro {
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 600;
 # 	system("libreoffice", "--display", "$Xdisplay", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
-	system("soffice", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
+	system("libreoffice3.5", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
 	alarm 0;
     };
     $status = $?;
@@ -562,7 +562,7 @@ sub html_to_epub {
 #     $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover`;
 #     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
 
-    $in_file = "$out_file_fix";
+#     $in_file = "$out_file_fix";
     ### epub with external font
     print "Converting to epub with external font.\n";
     $out_file_fix = "$dir/external/$name_fix.epub";
