@@ -759,7 +759,7 @@ sub transformer {
 
     foreach my $file (sort keys %$files_to_import) {
 	my $type = $files_to_import->{$file}->{"type"};
-	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf1$/i) {
+	if ($type =~ m/\.docx1?$/i || $type =~ m/\.odt1$/i || $type =~ m/\.rtf$/i) {
 	    print "start working for book $file: $crt out of $total.\n";
 	    my ($html, $images) = libreoffice_to_epub($files_to_import->{$file}, "html");
 # 	    import_html_to_wiki($html, $images, $files_to_import->{$file});
