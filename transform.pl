@@ -16,8 +16,8 @@ BEGIN {
   }
 }
 
-my $os = $^O;
-$os = "windows" if $^O eq "MSWin32";
+# my $os = $^O;
+# $os = "windows" if $^O eq "MSWin32";
 use File::Find;
 use File::Copy;
 use lib (fileparse(abs_path($0), qr/\.[^.]*/))[1]."our_perl_lib/lib";
@@ -30,6 +30,7 @@ $Data::Dumper::Sortkeys = 1;
 use HTML::Tidy;
 use URI::Escape;
 use Time::HiRes qw(usleep nanosleep);
+use File::stat;
 
 use threads;
 use threads::shared;
@@ -42,7 +43,8 @@ use Carti::Common;
 use Carti::WikiTxtClean;
 
 my $DataQueue = Thread::Queue->new();
-my $max_html_parse_threads = 6;
+my $max_html_parse_threads = 8;
+my $sema = Thread::Semaphore->new();
 
 my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
 my $extra_tools_dir = "$script_dir/tools";
@@ -125,8 +127,10 @@ sub get_series {
 }
 
 my $first_time = 0;
-my $libreoo_path = "/opt/libreoffice3.5/program/soffice";
-my $libreoo_home = $ENV{"HOME"}."/.config/libreoffice/";
+# my $libreoo_path = "/opt/libreoffice3.5/program/soffice";
+my $libreoo_path = "soffice";
+# my $libreoo_home = $ENV{"HOME"}."/.config/libreoffice/";
+my $libreoo_home = $ENV{"HOME"}."/.libreoffice/";
 sub doc_to_html_macro {
     my $doc_file = shift;
     my ($name,$dir,$suffix) = fileparse($doc_file, qr/\.[^.]*/);
@@ -138,11 +142,9 @@ sub doc_to_html_macro {
 	copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", "$libreoo_home/3/user/basic/Standard/") or die "Copy failed libreoffice macros: $!\n";
 	$first_time++;
     }
-
-    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
-#     system("Xvfb $Xdisplay -screen 0 1024x768x16 &> /dev/null &") if $os ne "windows";
+    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}')`;
+#     system("Xvfb $Xdisplay -screen 0 1024x768x16 &");
     eval {
-	die  if $os eq "windows";
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 600;
 # 	system("$libreoo_path", "--display", "$Xdisplay", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
@@ -167,7 +169,6 @@ sub doc_to_html {
     my $status;
     `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
     eval {
-	die  if $os eq "windows";
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 600;
 	system("python", "$extra_tools_dir/unoconv", "-f", "html", "$doc_file") == 0 or die "unoconv failed: $?";
@@ -180,7 +181,7 @@ sub doc_to_html {
 	eval {
 	    local $SIG{ALRM} = sub { die "alarm\n" };
 	    alarm 600;
-	    system("Xvfb $Xdisplay -screen 0 1024x768x16 &> /dev/null &") if $os ne "windows";
+	    system("Xvfb $Xdisplay -screen 0 1024x768x16 &> /dev/null &");
 	    system("$libreoo_path", "--display", "$Xdisplay", "--unnaccept=all", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "html:HTML (StarWriter)", "--outdir", "$dir", "$doc_file") == 0 or die "libreoffice failed: $?";
 	    alarm 0;
 	};
@@ -196,46 +197,8 @@ sub doc_to_html {
     return 0;
 }
 
-sub get_existing_documents {
-    my $new_files = shift;
-    our $files_already_imported = {};
-    my $work_dir = "$script_dir/$work_prefix/";
-    die "Working dir $work_dir is a file.\n" if -f $work_dir;
-    print "Get already done files from $work_dir.\n";
-    Common::makedir($work_dir);
-    $work_dir = abs_path("$script_dir/$work_prefix/");
-    opendir(DIR, "$work_dir") || die("Cannot open directory $work_dir.\n");
-    my @alldirs = grep { (!/^\.\.?$/) && -d "$work_dir/$_" } readdir(DIR);
-    closedir(DIR);
-    foreach my $dir (sort @alldirs) {
-# 	print "Found document $dir.\n";
-	my $title = $dir;
-	$dir = "$work_dir/$dir";
-	if (! -f "$dir/$control_file"){
-	    print "Remove wrong dir $dir.\n";
-	    remove_tree("$dir") || die "Can't remove dir $dir: $!.\n";
-	    next;
-	}
-
-	my $book_info = Common::xmlfile_to_hash("$dir/$control_file");
-
-	foreach my $key (keys %$book_info){
-	    my $tmp = $book_info->{$key};
-	    $new_files->{$title}->{$key} = $book_info->{$key} if ! defined $new_files->{$title}->{$key};
-	}
-	$files_already_imported->{$title} = 0;
-	if ( defined $book_info->{"libreoffice"} && $book_info->{"libreoffice"} eq "done" &&
-	  $book_info->{"md5"} eq $new_files->{$title}->{"md5"}) {
-	    $files_already_imported->{$title} = $book_info->{"md5"}
-	} else {
-	    print "Remove wrong dir $dir.\n";
-	    remove_tree("$dir") || die "Can't remove dir $dir: $!.\n";
-	}
-    }
-    return ($files_already_imported, $new_files);
-}
-
-sub get_new_documents {
+sub get_documents {
+    our $files_already_imported = shift;
     our $files_to_import = {};
     our $count = 0;
     sub add_document {
@@ -269,20 +232,70 @@ sub get_new_documents {
 	$coperta = "$dir/$book.jpg" if -f "$dir/$book.jpg";
 	($ver, $book) = get_version($book);
 	($series, $series_no, $book) = get_series($book);
-	die "Book already exists: $auth$url_sep$book ($file)\n".Dumper($files_to_import->{"$auth$url_sep$book"}) if defined $files_to_import->{"$auth$url_sep$book"};
-	$files_to_import->{"$auth$url_sep$book"}->{"type"} = "$suffix";
-	$files_to_import->{"$auth$url_sep$book"}->{"coperta"} = "$coperta" if defined $coperta;
-	$files_to_import->{"$auth$url_sep$book"}->{"file"} = "$file";
-	$files_to_import->{"$auth$url_sep$book"}->{"title"} = "$book";
-# 	$files_to_import->{"$auth$url_sep$book"}->{"md5"} = "1";
-	$files_to_import->{"$auth$url_sep$book"}->{"md5"} = Common::get_file_md5($file);
-	$files_to_import->{"$auth$url_sep$book"}->{"auth"} = $auth;
-	$files_to_import->{"$auth$url_sep$book"}->{"ver"} = $ver;
-	$files_to_import->{"$auth$url_sep$book"}->{"seria"} = $series;
-	$files_to_import->{"$auth$url_sep$book"}->{"seria_no"} = $series_no;
+	my $key = "$auth$url_sep$book";
+	die "Book already exists: $key ($file)\n".Dumper($files_to_import->{"$key"}) if defined $files_to_import->{"$key"};
+	$files_to_import->{"$key"}->{"file"} = "$file";
+	$files_to_import->{"$key"}->{"filesize"} = -s "$file";
+	$files_to_import->{"$key"}->{"filedate"} = stat($file)->mtime;
+	$files_to_import->{"$key"}->{"type"} = "$suffix";
+	$files_to_import->{"$key"}->{"coperta"} = "$coperta" if defined $coperta;
+	$files_to_import->{"$key"}->{"title"} = "$book";
+	$files_to_import->{"$key"}->{"md5"} = (defined $files_already_imported->{$key} &&
+	      $files_already_imported->{$key}->{"filesize"} eq $files_to_import->{"$key"}->{"filesize"} &&
+	      $files_already_imported->{$key}->{"filedate"} eq $files_to_import->{"$key"}->{"filedate"})
+		    ? $files_already_imported->{"$key"}->{"md5"} : Common::get_file_md5("$file");
+	$files_to_import->{"$key"}->{"auth"} = $auth;
+	$files_to_import->{"$key"}->{"ver"} = $ver;
+	$files_to_import->{"$key"}->{"seria"} = $series;
+	$files_to_import->{"$key"}->{"seria_no"} = $series_no;
+# 	my ($name,$dir,$ext) = (Common::normalize_text($file), qr/\.[^.]*/);
+	my $work_dir = "$script_dir/$work_prefix/$key";
+	$work_dir =~ s/[:,]//g;
+	$files_to_import->{"$key"}->{"workdir"} = Common::normalize_text("$work_dir");
+	my $working_file = "$work_dir/$book$suffix";
+	$working_file =~ s/[:,]//g;
+	$files_to_import->{"$key"}->{"workingfile"} = Common::normalize_text("$working_file");
     }
     print "Get all files.\n";
     find ({wanted => sub { add_document ($File::Find::name) if -f },},"$docs_prefix") if -d "$docs_prefix";
+    return $files_to_import;
+}
+
+sub get_existing_documents {
+#     my $documents_to_import = shift;
+    our $files_already_imported = {};
+    my $work_dir = "$script_dir/$work_prefix/";
+    die "Working dir $work_dir is a file.\n" if -f $work_dir;
+    return if ! -d $work_dir;
+    print "Get already done files from $work_dir.\n";
+#     Common::makedir($work_dir);
+    $work_dir = abs_path("$script_dir/$work_prefix/");
+    opendir(DIR, "$work_dir") || die("Cannot open directory $work_dir.\n");
+    my @alldirs = grep { (!/^\.\.?$/) && -d "$work_dir/$_" } readdir(DIR);
+    closedir(DIR);
+    foreach my $dir (sort @alldirs) {
+# 	print "Found document $dir.\n";
+	my $title = $dir;
+	$dir = "$work_dir/$dir";
+	if (! -f "$dir/$control_file"){
+	    die "Remove wrong dir $dir.\n";
+	    remove_tree("$dir") || die "Can't remove dir $dir: $!.\n";
+	    next;
+	}
+	$files_already_imported->{$title} = Common::xmlfile_to_hash("$dir/$control_file");
+    }
+    return ($files_already_imported);
+}
+
+sub synchronize_files {
+    my $files_already_imported = get_existing_documents;
+    my $files_to_import = get_documents($files_already_imported);
+    print "\tDone.\n";
+#     my @arr1 = (keys %$files_already_imported);
+#     my @arr2 = (keys %$files_to_import);
+#     my ($only_in1, $only_in2, $common) = Common::array_diff(\@arr1, \@arr2);
+#     ## should delete $only_in1
+#     remove_tree("$script_dir/$work_prefix/$_") foreach (@$only_in1);
     return $files_to_import;
 }
 
@@ -424,14 +437,14 @@ sub import_to_wiki {
     $our_wiki->wiki_edit_page("$title", $wiki);
     return $wiki;
 }
-
+our $latest_locker :shared = "";
 sub libreoffice_to_epub {
     my ($book, $mode) = @_;
     return if defined $book->{"epub"} && $book->{"epub"} eq "done";
     my ($file, $title) =($book->{"file"}, $book->{"title"});
-    my ($name,$dir,$ext) = fileparse(Common::normalize_text($file), qr/\.[^.]*/);
-    my $work_dir = "$script_dir/$work_prefix/".($book->{"auth"})."$url_sep$title";
-    my $working_file = "$work_dir/$name$ext";
+    my $working_file = $book->{"workingfile"};
+    my ($name,$dir,$ext) = fileparse($working_file, qr/\.[^.]*/);
+    my $work_dir = $book->{"workdir"};
     my $html_file = "$work_dir/$name.html";
     my $html_file_orig = "$work_dir/$name"."_orig.html";
     my $html_file_clean = "$work_dir/$name"."_clean.html";
@@ -441,13 +454,13 @@ sub libreoffice_to_epub {
     $work = 0;
     eval{
     if (($mode eq "html") && !(defined $book->{"libreoffice"} && $book->{"libreoffice"} eq "done")) {
-	print "Doing the doc to html conversion.\n";
+	print "Doing the doc to html conversion for $title.\n";
 	remove_tree("$work_dir") || die "Can't remove dir $work_dir: $!.\n" if -d "$work_dir";
 	Common::makedir($work_dir);
 	copy("$file", $working_file) or die "Copy failed $working_file: $!\n";
 	if (defined $book->{'coperta'}){copy($book->{'coperta'}, $work_dir) or die "Copy failed ".$book->{'coperta'}.": $!\n"};
 	my $res = doc_to_html_macro("$working_file");
-	if ($res || ! -s $html_file) {print "Can't generate html.\n"; return;};
+	if ($res || ! -s $html_file) {print "Can't generate html $html_file.\n"; return;};
 	move("$html_file", "$html_file_orig") || die "can't move file $html_file.\n";
 	my $zip_file = "$work_dir/$title.zip";
 	Common::add_file_to_zip("$zip_file", "$file");
@@ -455,15 +468,20 @@ sub libreoffice_to_epub {
 	$book->{"libreoffice"} = "done";
 	$work++;
     }};
-    if ($@) {print Dumper($@). "error: $?.\n"; return;};
+    if ($@) {print "XXXX ERROR".Dumper($@). "error: $?.\n"; return;};
     $DataQueue->enqueue($book) if ($mode eq "html") ;
     Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
     return if $mode eq "html";
 
     $work = 0;
+    my $html_file_orig_size = (-s "$html_file_orig");
+die Dumper($book) if ! defined $html_file_orig_size;
+    usleep(300000) while (! $sema->down_nb);#{print "Waiting for lock in \n\t$title \nfrom :\n\t$latest_locker.\n"; ;};
+    $latest_locker = $working_file;
+    $sema->up if ($html_file_orig_size < 3000000);
     eval {
     if (($mode eq "epub") && !(defined $book->{"html_clean"} && $book->{"html_clean"} eq "done"  && -s $html_file_clean)) {
-	print "Doing the html cleanup.\n";
+	print "Doing the html cleanup for $title.\n";
 	my ($html, $images) = clean_html_from_oo(Common::read_file("$html_file_orig"), $work_dir);
 	$html =~ s/&shy;//g;
 	$images = convert_images ($images, $work_dir);
@@ -475,13 +493,14 @@ sub libreoffice_to_epub {
 	$book->{"html_clean"} = "done";
 	$work++;
     }};
+    $sema->up if !($html_file_orig_size < 3000000);
     if ($@) {print Dumper($@). "error: $?.\n"; return;};
     Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
 
     $work = 0;
     eval {
     if ($mode eq "epub" && -s $html_file_clean) {
-	print "Doing the epub.\n";
+	print "Doing the epub for $title.\n";
 	opendir(DIR, "$work_dir");
 	my @images = grep(/\.jpg$/,readdir(DIR));
 	closedir(DIR);
@@ -551,6 +570,7 @@ sub html_to_epub {
 
     my $epub_command = "$extra_tools_dir/calibre/ebook-convert";
     my $epub_parameters = "--disable-font-rescaling --minimum-line-height=0 --toc-threshold=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --authors=\"$authors\" --title=\"".$book->{'title'}."\"";
+# --keep-ligatures --rating=between 1 and 5
     $epub_parameters .= " --tags=\"".(join ',', @tags)."\"" if scalar @tags;
     $epub_parameters .= " --series=\"".$book->{'seria'}."\" --series-index=\".$book->{'seria_no'}"."\"" if defined $book->{'seria'} && defined $book->{'seria_no'};
     $epub_parameters .= " --cover=\"$coperta\"" if defined $coperta;
@@ -612,19 +632,6 @@ sub html_to_epub {
 #     Common::makedir("$dir/fb2/");
 #     `$epub_command \"$in_file\" \"$out_file\" $epub_parameters`;
     unlink $html_file;
-}
-#  -   --rating=between 1 and 5
-
-sub synchronize_files {
-#     my $files_to_import = get_new_documents;
-    my ($files_already_imported, $files_to_import) = get_existing_documents (get_new_documents);
-    print "\tDone.\n";
-    my @arr1 = (keys %$files_already_imported);
-    my @arr2 = (keys %$files_to_import);
-    my ($only_in1, $only_in2, $common) = Common::array_diff(\@arr1, \@arr2);
-    ## should delete $only_in1
-    remove_tree("$script_dir/$work_prefix/$_") foreach (@$only_in1);
-    return $files_to_import;
 }
 
 sub clean_files {
@@ -759,7 +766,7 @@ sub transformer {
 
     foreach my $file (sort keys %$files_to_import) {
 	my $type = $files_to_import->{$file}->{"type"};
-	if ($type =~ m/\.docx1?$/i || $type =~ m/\.odt1$/i || $type =~ m/\.rtf$/i) {
+	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) {
 	    print "start working for book $file: $crt out of $total.\n";
 	    my ($html, $images) = libreoffice_to_epub($files_to_import->{$file}, "html");
 # 	    import_html_to_wiki($html, $images, $files_to_import->{$file});

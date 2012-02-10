@@ -28,8 +28,9 @@ ooproc = None
 exitcode = 0
 
 class Office:
-    def __init__(self, basepath, unopath, pyuno, binary, python, pythonhome):
+    def __init__(self, basepath, urepath, unopath, pyuno, binary, python, pythonhome):
         self.basepath = basepath
+        self.urepath = urepath
         self.unopath = unopath
         self.pyuno = pyuno
         self.binary = binary
@@ -42,7 +43,7 @@ class Office:
     def __repr__(self):
         return self.basepath
 
-### The first thing we ought to do is find a suitable LibreOffice installation
+### The first thing we ought to do is find a suitable Office installation
 ### with a compatible pyuno library that we can import.
 ###
 ### See: http://user.services.openoffice.org/en/forum/viewtopic.php?f=45&t=36370&p=166783
@@ -56,32 +57,33 @@ def find_offices():
         extrapaths += [ os.environ['UNO_PATH'],
                         os.path.dirname(os.environ['UNO_PATH']),
                         os.path.dirname(os.path.dirname(os.environ['UNO_PATH'])) ]
-
-    if os.name in ( 'nt', 'os2' ):
-        if 'ProgramFiles' in os.environ.keys():
-            extrapaths += glob.glob(os.environ['ProgramFiles']+'\\LibreOffice*') + \
-                          glob.glob(os.environ['ProgramFiles']+'\\OpenOffice.org*')
-
-        if 'ProgramFiles(x86)' in os.environ.keys():
-            extrapaths += glob.glob(os.environ['ProgramFiles(x86)']+'\\LibreOffice*') + \
-                          glob.glob(os.environ['ProgramFiles(x86)']+'\\OpenOffice.org*')
-
-    elif os.name in ( 'mac', ) or sys.platform in ( 'darwin', ):
-        extrapaths += [ '/Applications/LibreOffice.app/Contents',
-                        '/Applications/NeoOffice.app/Contents',
-                        '/Applications/OpenOffice.org.app/Contents' ]
-
     else:
-        extrapaths += glob.glob('/usr/lib*/libreoffice*') + \
-                      glob.glob('/usr/lib*/openoffice*') + \
-                      glob.glob('/usr/lib*/ooo*') + \
-                      glob.glob('/opt/libreoffice*') + \
-                      glob.glob('/opt/openoffice*') + \
-                      glob.glob('/opt/ooo*') + \
-                      glob.glob('/usr/local/libreoffice*') + \
-                      glob.glob('/usr/local/openoffice*') + \
-                      glob.glob('/usr/local/ooo*') + \
-                      glob.glob('/usr/local/lib/libreoffice*')
+
+        if os.name in ( 'nt', 'os2' ):
+            if 'PROGRAMFILES' in os.environ.keys():
+                extrapaths += glob.glob(os.environ['PROGRAMFILES']+'\\LibreOffice*') + \
+                              glob.glob(os.environ['PROGRAMFILES']+'\\OpenOffice.org*')
+
+            if 'PROGRAMFILES(X86)' in os.environ.keys():
+                extrapaths += glob.glob(os.environ['PROGRAMFILES(X86)']+'\\LibreOffice*') + \
+                              glob.glob(os.environ['PROGRAMFILES(X86)']+'\\OpenOffice.org*')
+
+        elif os.name in ( 'mac', ) or sys.platform in ( 'darwin', ):
+            extrapaths += [ '/Applications/LibreOffice.app/Contents',
+                            '/Applications/NeoOffice.app/Contents',
+                            '/Applications/OpenOffice.org.app/Contents' ]
+
+        else:
+            extrapaths += glob.glob('/usr/lib*/libreoffice*') + \
+                          glob.glob('/usr/lib*/openoffice*') + \
+                          glob.glob('/usr/lib*/ooo*') + \
+                          glob.glob('/opt/libreoffice*') + \
+                          glob.glob('/opt/openoffice*') + \
+                          glob.glob('/opt/ooo*') + \
+                          glob.glob('/usr/local/libreoffice*') + \
+                          glob.glob('/usr/local/openoffice*') + \
+                          glob.glob('/usr/local/ooo*') + \
+                          glob.glob('/usr/local/lib/libreoffice*')
 
     ### Find a working set of pyuno module
     for basepath in extrapaths:
@@ -89,15 +91,23 @@ def find_offices():
             officelibrary = 'pyuno.pyd'
             officebinary = 'soffice.exe'
             pythonbinary = 'python.exe'
-            basispath = 'basis'
         else:
             officelibrary = 'pyuno.so'
             officebinary = 'soffice.bin'
             pythonbinary = 'python.bin'
-            basispath = 'basis-link'
 
-        if not os.path.isfile(os.path.join(basepath, basispath, 'program', officelibrary)):
-            continue
+        ### Older LibreOffice/OpenOffice and Windows use basis-link/ or basis/
+        for basis in ('basis-link', 'basis', ''):
+            if os.path.isfile(os.path.join(basepath, basis, 'program', officelibrary)):
+                basispath = basis
+                break
+
+        ### Windows does not provide or need a URE/lib directory ?
+        urepath = ''
+        for ure in ('ure-link', 'ure', 'URE', ''):
+            if os.path.isfile(os.path.join(basepath, basis, ure, 'lib', 'unorc')):
+                urepath = ure
+                break
 
         if not os.path.isfile(os.path.join(basepath, 'program', officebinary)):
             continue
@@ -107,6 +117,7 @@ def find_offices():
 
         if os.path.isfile(os.path.join(basepath, basispath, 'program', pythonbinary)):
             ret.append(Office(basepath,
+                              os.path.join(basepath, basispath, urepath),
                               os.path.join(basepath, basispath, 'program'),
                               os.path.join(basepath, basispath, 'program', officelibrary),
                               os.path.join(basepath, 'program', officebinary),
@@ -114,6 +125,7 @@ def find_offices():
                               glob.glob(os.path.join(basepath, basispath, 'program', 'python-core-*'))[0]))
         else:
             ret.append(Office(basepath,
+                              os.path.join(basepath, basispath, urepath),
                               os.path.join(basepath, basispath, 'program'),
                               os.path.join(basepath, basispath, 'program', officelibrary),
                               os.path.join(basepath, 'program', officebinary),
@@ -126,16 +138,6 @@ def office_environ(office):
     ### Set PATH so that crash_report is found
     os.environ['PATH'] = os.path.join(office.basepath, 'program') + os.pathsep + os.environ['PATH']
 
-
-    ### Set LD_LIBRARY_PATH so that "import pyuno" finds libpyuno.so:
-    if 'LD_LIBRARY_PATH' in os.environ:
-        os.environ['LD_LIBRARY_PATH'] = office.unopath + os.pathsep + \
-                                        os.path.join(office.basepath, 'basis-link', 'ure-link', 'lib') + os.pathsep + \
-                                        os.environ['LD_LIBRARY_PATH']
-    else:
-        os.environ['LD_LIBRARY_PATH'] = office.unopath + os.pathsep + \
-                                        os.path.join(office.basepath, 'basis-link', 'ure-link', 'lib')
-
     ### Set UNO_PATH so that "officehelper.bootstrap()" can find soffice executable:
     os.environ['UNO_PATH'] = office.unopath
 
@@ -145,20 +147,28 @@ def office_environ(office):
         os.environ['URE_BOOTSTRAP'] = 'vnd.sun.star.pathname:' + os.path.join(office.basepath, 'program', 'fundamental.ini')
     else:
         os.environ['URE_BOOTSTRAP'] = 'vnd.sun.star.pathname:' + os.path.join(office.basepath, 'program', 'fundamentalrc')
-#    if os.name in ( 'nt', 'os2' ):
-#        os.environ['URE_BOOTSTRAP'] = os.path.join(office.basepath, 'program', 'fundamental.ini')
-#    else:
-#        os.environ['URE_BOOTSTRAP'] = os.path.join(office.basepath, 'program', 'fundamentalrc')
 
-    for libpath in glob.glob(os.path.join(office.basepath, 'basis-link', 'ure-link', 'lib')) + \
-                   glob.glob(os.path.join(office.unopath, 'python-core-*', 'lib', 'site-packages')) + \
-                   glob.glob(os.path.join(office.unopath, 'python-core-*', 'lib', 'lib-tk')) + \
-                   glob.glob(os.path.join(office.unopath, 'python-core-*', 'lib', 'lib-dynload')) + \
-                   glob.glob(os.path.join(office.unopath, 'python-core-*', 'lib')):
-        sys.path.insert(0, libpath)
-    sys.path.insert(0, office.unopath)
+        ### Set LD_LIBRARY_PATH so that "import pyuno" finds libpyuno.so:
+        if 'LD_LIBRARY_PATH' in os.environ:
+            os.environ['LD_LIBRARY_PATH'] = office.unopath + os.pathsep + \
+                                            os.path.join(office.urepath, 'lib') + os.pathsep + \
+                                            os.environ['LD_LIBRARY_PATH']
+        else:
+            os.environ['LD_LIBRARY_PATH'] = office.unopath + os.pathsep + \
+                                            os.path.join(office.urepath, 'lib')
+
+#    ### No longer needed as the LibreOffice python instance gets this from PYTHONHOME
+#    if office.pythonhome:
+#        for libpath in os.path.join(office.pythonhome, 'lib') + \
+#                       os.path.join(office.pythonhome, 'lib', 'lib-dynload') + \
+#                       os.path.join(office.pythonhome, 'lib', 'lib-tk') + \
+#                       os.path.join(office.pythonhome, 'lib', 'site-packages') +\
+#                       office.unopath):
+#            sys.path.insert(0, libpath)
 
 def debug_office():
+    print 'sysname=%s' % os.name
+    print 'platform=%s' % sys.platform
     print 'python=%s' % sys.executable
     print 'python-version=%s' % sys.version
     if 'URE_BOOTSTRAP' in os.environ:
@@ -169,36 +179,58 @@ def debug_office():
         print 'UNO_TYPES=%s' % os.environ['UNO_TYPES']
     print 'PATH=%s' % os.environ['PATH']
     if 'PYTHONHOME' in os.environ:
-        print 'PYTHONHOME =', os.environ['PYTHONHOME']
+        print 'PYTHONHOME=%s' % os.environ['PYTHONHOME']
     if 'PYTHONPATH' in os.environ:
-        print 'PYTHONPATH =', os.environ['PYTHONPATH']
+        print 'PYTHONPATH=%s' % os.environ['PYTHONPATH']
     if 'LD_LIBRARY_PATH' in os.environ:
-        print 'LD_LIBRARY_PATH =', os.environ['LD_LIBRARY_PATH']
+        print 'LD_LIBRARY_PATH=%s' % os.environ['LD_LIBRARY_PATH']
 
 def python_switch(office):
 #   print >>sys.stderr, "WARNING: It is recommended to use python %s to run unoconv" % pybin
     if office.pythonhome:
         os.environ['PYTHONHOME'] = office.pythonhome
         os.environ['PYTHONPATH'] = os.path.join(office.pythonhome, 'lib') + os.pathsep + \
-                                   os.path.join(office.pythonhome, 'lib', 'site-packages') + os.pathsep + \
-                                   os.path.join(office.pythonhome, 'lib', 'lib-tk') + os.pathsep + \
                                    os.path.join(office.pythonhome, 'lib', 'lib-dynload') + os.pathsep + \
+                                   os.path.join(office.pythonhome, 'lib', 'lib-tk') + os.pathsep + \
+                                   os.path.join(office.pythonhome, 'lib', 'site-packages') + os.pathsep + \
                                    office.unopath
-
-    ### Set LD_LIBRARY_PATH so that "import pyuno" finds libpyuno.so:
-    if 'LD_LIBRARY_PATH' in os.environ:
-        os.environ['LD_LIBRARY_PATH'] = office.unopath + os.pathsep + \
-                                        os.path.join(office.basepath, 'basis-link', 'ure-link', 'lib') + os.pathsep + \
-                                        os.environ['LD_LIBRARY_PATH']
-    else:
-        os.environ['LD_LIBRARY_PATH'] = office.unopath + os.pathsep + \
-                                        os.path.join(office.basepath, 'basis-link', 'ure-link', 'lib')
 
     os.environ['UNO_PATH'] = office.unopath
 
-    if op.verbose > 0:
-        print >>sys.stderr, "Switching from python %s to %s" % (sys.executable, office.python)
-    os.execvpe(office.python, [office.python, ] + sys.argv[0:], os.environ)
+#    print >>sys.stderr, "Switching from python %s to %s" % (sys.executable, office.python)
+    if os.name in ('nt', 'os2'):
+        ### os.execv is broken on Windows and can't properly parse command line
+        ### arguments and executable name if they contain whitespaces. subprocess
+        ### fixes that behavior.
+        ret = subprocess.call([office.python] + sys.argv[0:])
+        sys.exit(ret)
+    else:
+
+        ### Set LD_LIBRARY_PATH so that "import pyuno" finds libpyuno.so:
+        if 'LD_LIBRARY_PATH' in os.environ:
+            os.environ['LD_LIBRARY_PATH'] = office.unopath + os.pathsep + \
+                                            os.path.join(office.urepath, 'lib') + os.pathsep + \
+                                            os.environ['LD_LIBRARY_PATH']
+        else:
+            os.environ['LD_LIBRARY_PATH'] = office.unopath + os.pathsep + \
+                                            os.path.join(office.urepath, 'lib')
+
+        try:
+            os.execvpe(office.python, [office.python, ] + sys.argv[0:], os.environ)
+        except OSError:
+            ### Mac OS X versions prior to 10.6 do not support execv in
+            ### a process that contains multiple threads.  Instead of
+            ### re-executing in the current process, start a new one
+            ### and cause the current process to exit.  This isn't
+            ### ideal since the new process is detached from the parent
+            ### terminal and thus cannot easily be killed with ctrl-C,
+            ### but it's better than not being able to autoreload at
+            ### all.
+            ### Unfortunately the errno returned in this case does not
+            ### appear to be consistent, so we can't easily check for
+            ### this error specifically.
+            ret = os.spawnvpe(os.P_WAIT, office.python, [office.python, ] + sys.argv[0:], os.environ)
+            sys.exit(ret)
 
 class Fmt:
     def __init__(self, doctype, name, extension, summary, filter):
@@ -251,15 +283,13 @@ class FmtList:
 
 fmts = FmtList()
 
-#oFF = createUnoService( "com.sun.star.document.FilterFactory" )
-#oFilterNames = oFF.getElementNames()
-
 ### TextDocument
 fmts.add('document', 'bib', 'bib', 'BibTeX', 'BibTeX_Writer') ### 22
 fmts.add('document', 'doc', 'doc', 'Microsoft Word 97/2000/XP', 'MS Word 97') ### 29
 fmts.add('document', 'doc6', 'doc', 'Microsoft Word 6.0', 'MS WinWord 6.0') ### 24
 fmts.add('document', 'doc95', 'doc', 'Microsoft Word 95', 'MS Word 95') ### 28
 fmts.add('document', 'docbook', 'xml', 'DocBook', 'DocBook File') ### 39
+fmts.add('document', 'fodt', 'fodt', 'OpenDocument Text (Flat XML)', 'OpenDocument Text Flat XML')
 fmts.add('document', 'html', 'html', 'HTML Document (OpenOffice.org Writer)', 'HTML (StarWriter)') ### 3
 fmts.add('document', 'odt', 'odt', 'ODF Text Document', 'writer8') ### 10
 fmts.add('document', 'ott', 'ott', 'Open Document Text', 'writer8_template') ### 21
@@ -274,7 +304,7 @@ fmts.add('document', 'sdw4', 'sdw', 'StarWriter 4.0', 'StarWriter 4.0') ### 2
 fmts.add('document', 'sdw3', 'sdw', 'StarWriter 3.0', 'StarWriter 3.0') ### 20
 fmts.add('document', 'stw', 'stw', 'Open Office.org 1.0 Text Document Template', 'writer_StarOffice_XML_Writer_Template') ### 9
 fmts.add('document', 'sxw', 'sxw', 'Open Office.org 1.0 Text Document', 'StarOffice XML (Writer)') ### 1
-fmts.add('document', 'text', 'txt', 'Text Encoded', 'Text (encoded)') ### 26
+fmts.add('document', 'text', 'txt', 'Text Encoded', 'Text (Encoded)') ### 26
 fmts.add('document', 'mediawiki', 'txt', 'MediaWiki', 'MediaWiki')
 fmts.add('document', 'txt', 'txt', 'Text', 'Text') ### 34
 fmts.add('document', 'uot', 'uot', 'Unified Office Format text','UOF text') ### 27
@@ -303,6 +333,7 @@ fmts.add('web', 'text10', 'txt', 'OpenOffice.org 1.0 Text Document (OpenOffice.o
 fmts.add('spreadsheet', 'csv', 'csv', 'Text CSV', 'Text - txt - csv (StarCalc)') ### 16
 fmts.add('spreadsheet', 'dbf', 'dbf', 'dBASE', 'dBase') ### 22
 fmts.add('spreadsheet', 'dif', 'dif', 'Data Interchange Format', 'DIF') ### 5
+fmts.add('spreadsheet', 'fods', 'fods', 'OpenDocument Spreadsheet (Flat XML)', 'OpenDocument Spreadsheet Flat XML')
 fmts.add('spreadsheet', 'html', 'html', 'HTML Document (OpenOffice.org Calc)', 'HTML (StarCalc)') ### 7
 fmts.add('spreadsheet', 'ods', 'ods', 'ODF Spreadsheet', 'calc8') ### 15
 fmts.add('spreadsheet', 'ooxml', 'xml', 'Microsoft Excel 2003 XML', 'MS Excel 2003 XML') ### 23
@@ -331,6 +362,7 @@ fmts.add('spreadsheet', 'xlt95', 'xlt', 'Microsoft Excel 95 Template', 'MS Excel
 fmts.add('graphics', 'bmp', 'bmp', 'Windows Bitmap', 'draw_bmp_Export') ### 21
 fmts.add('graphics', 'emf', 'emf', 'Enhanced Metafile', 'draw_emf_Export') ### 15
 fmts.add('graphics', 'eps', 'eps', 'Encapsulated PostScript', 'draw_eps_Export') ### 48
+fmts.add('graphics', 'fodg', 'fodg', 'OpenDocument Drawing (Flat XML)', 'OpenDocument Drawing Flat XML')
 fmts.add('graphics', 'gif', 'gif', 'Graphics Interchange Format', 'draw_gif_Export') ### 30
 fmts.add('graphics', 'html', 'html', 'HTML Document (OpenOffice.org Draw)', 'draw_html_Export') ### 37
 fmts.add('graphics', 'jpg', 'jpg', 'Joint Photographic Experts Group', 'draw_jpg_Export') ### 3
@@ -351,6 +383,7 @@ fmts.add('graphics', 'swf', 'swf', 'Macromedia Flash (SWF)', 'draw_flash_Export'
 fmts.add('graphics', 'sxd', 'sxd', 'OpenOffice.org 1.0 Drawing', 'StarOffice XML (Draw)') ### 26
 fmts.add('graphics', 'sxd3', 'sxd', 'StarDraw 3.0', 'StarDraw 3.0') ### 40
 fmts.add('graphics', 'sxd5', 'sxd', 'StarDraw 5.0', 'StarDraw 5.0') ### 44
+fmts.add('graphics', 'sxw', 'sxw', 'StarOffice XML (Draw)', 'StarOffice XML (Draw)')
 fmts.add('graphics', 'tiff', 'tiff', 'Tagged Image File Format', 'draw_tif_Export') ### 13
 fmts.add('graphics', 'vor', 'vor', 'StarDraw 5.0 Template', 'StarDraw 5.0 Vorlage') ### 36
 fmts.add('graphics', 'vor3', 'vor', 'StarDraw 3.0 Template', 'StarDraw 3.0 Vorlage') ### 35
@@ -362,6 +395,7 @@ fmts.add('graphics', 'xpm', 'xpm', 'X PixMap', 'draw_xpm_Export') ### 19
 fmts.add('presentation', 'bmp', 'bmp', 'Windows Bitmap', 'impress_bmp_Export') ### 15
 fmts.add('presentation', 'emf', 'emf', 'Enhanced Metafile', 'impress_emf_Export') ### 16
 fmts.add('presentation', 'eps', 'eps', 'Encapsulated PostScript', 'impress_eps_Export') ### 17
+fmts.add('presentation', 'fodp', 'fodp', 'OpenDocument Presentation (Flat XML)', 'OpenDocument Presentation Flat XML')
 fmts.add('presentation', 'gif', 'gif', 'Graphics Interchange Format', 'impress_gif_Export') ### 18
 fmts.add('presentation', 'html', 'html', 'HTML Document (OpenOffice.org Impress)', 'impress_html_Export') ### 43
 fmts.add('presentation', 'jpg', 'jpg', 'Joint Photographic Experts Group', 'impress_jpg_Export') ### 19
@@ -374,8 +408,11 @@ fmts.add('presentation', 'pct', 'pct', 'Mac Pict', 'impress_pct_Export') ### 22
 fmts.add('presentation', 'pdf', 'pdf', 'Portable Document Format', 'impress_pdf_Export') ### 23
 fmts.add('presentation', 'pgm', 'pgm', 'Portable Graymap', 'impress_pgm_Export') ### 24
 fmts.add('presentation', 'png', 'png', 'Portable Network Graphic', 'impress_png_Export') ### 25
+fmts.add('presentation', 'potm', 'potm', 'Microsoft PowerPoint 2007/2010 XML Template', 'Impress MS PowerPoint 2007 XML Template')
 fmts.add('presentation', 'pot', 'pot', 'Microsoft PowerPoint 97/2000/XP Template', 'MS PowerPoint 97 Vorlage') ### 3
 fmts.add('presentation', 'ppm', 'ppm', 'Portable Pixelmap', 'impress_ppm_Export') ### 26
+fmts.add('presentation', 'pptx', 'pptx', 'Microsoft PowerPoint 2007/2010 XML', 'Impress MS PowerPoint 2007 XML') ### 36
+fmts.add('presentation', 'pps', 'pps', 'Microsoft PowerPoint 97/2000/XP (Autoplay)', 'MS PowerPoint 97 Autoplay') ### 36
 fmts.add('presentation', 'ppt', 'ppt', 'Microsoft PowerPoint 97/2000/XP', 'MS PowerPoint 97') ### 36
 fmts.add('presentation', 'pwp', 'pwp', 'PlaceWare', 'placeware_Export') ### 30
 fmts.add('presentation', 'ras', 'ras', 'Sun Raster Image', 'impress_ras_Export') ### 27
@@ -534,12 +571,16 @@ class Options:
                 self.format = 'pdf'
 
     def version(self):
+        ### Get office product information
+        product = uno.getComponentContext().ServiceManager.createInstance("com.sun.star.configuration.ConfigurationProvider").createInstanceWithArguments("com.sun.star.configuration.ConfigurationAccess", UnoProps(nodepath="/org.openoffice.Setup/Product"))
+
         print 'unoconv %s' % VERSION
         print 'Written by Dag Wieers <dag@wieers.com>'
         print 'Homepage at http://dag.wieers.com/home-made/unoconv/'
         print
         print 'platform %s/%s' % (os.name, sys.platform)
         print 'python %s' % sys.version
+        print product.ooName, product.ooSetupVersion
         print
         print 'build revision $Rev$'
 
@@ -595,8 +636,11 @@ class Convertor:
             ### Start our own OpenOffice instance
             info(3, "Launching our own listener using %s." % office.binary)
             try:
-#                print office.binary, "-headless", "-invisible", "-nocrashreport", "-nodefault", "-nofirststartwizard", "-nologo", "-norestore", "-accept=%s" % op.connection
-                ooproc = subprocess.Popen([office.binary, "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nofirststartwizard", "--nologo", "--norestore", "--accept=%s" % op.connection], env=os.environ)
+                product = uno.getComponentContext().ServiceManager.createInstance("com.sun.star.configuration.ConfigurationProvider").createInstanceWithArguments("com.sun.star.configuration.ConfigurationAccess", UnoProps(nodepath="/org.openoffice.Setup/Product"))
+                if product.ooName != "LibreOffice" or product.ooSetupVersion <= 3.3:
+                    ooproc = subprocess.Popen([office.binary, "-headless", "-invisible", "-nocrashreport", "-nodefault", "-nofirststartwizard", "-nologo", "-norestore", "-accept=%s" % op.connection], env=os.environ)
+                else:
+                    ooproc = subprocess.Popen([office.binary, "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nofirststartwizard", "--nologo", "--norestore", "--accept=%s" % op.connection], env=os.environ)
                 info(2, 'LibreOffice listener successfully started. (pid=%s)' % ooproc.pid)
 
                 ### Try connection to it for op.timeout seconds (flakky LibreOffice)
@@ -629,6 +673,12 @@ class Convertor:
         self.desktop = unosvcmgr.createInstanceWithContext("com.sun.star.frame.Desktop", unocontext)
         self.config = unosvcmgr.createInstanceWithContext( "com.sun.star.configuration.ConfigurationProvider", unocontext)
         self.cwd = unohelper.systemPathToFileUrl( os.getcwd() )
+
+        ### List all filters
+#        self.filters = unosvcmgr.createInstanceWithContext( "com.sun.star.document.FilterFactory", unocontext)
+#        for filter in self.filters.getElementNames():
+#            print filter
+#            #print dir(filter), dir(filter.format)
 
     def getformat(self, inputfn):
         doctype = None
@@ -683,39 +733,32 @@ class Convertor:
             exitcode = 1
 
         try:
-            ### Load inputfile
-            inputprops = (
-                PropertyValue( "Hidden", 0, True, 0 ),
-                PropertyValue( "ReadOnly", 0, True, 0 ),
-                PropertyValue( "FilterOptions", 0, op.importfilter, 0 ),
-            )
+            ### Import phase
+            phase = "import"
 
+            ### Load inputfile
+            inputprops = UnoProps(Hidden=True, ReadOnly=True, UpdateDocMode=QUIET_UPDATE, FilterOptions=op.importfilter)
             inputurl = unohelper.absolutize(self.cwd, unohelper.systemPathToFileUrl(inputfn))
 #            print dir(self.desktop)
             document = self.desktop.loadComponentFromURL( inputurl , "_blank", 0, inputprops )
 
             if not document:
-                raise UnoException("File could not be loaded by LibreOffice", None)
+                raise UnoException("The document '%s' could not be opened." % inputurl, None)
 
             ### Import style template
+            phase = "import-style"
             if op.template:
                 if os.path.exists(op.template):
-                    if op.verbose > 0:
-                        print >>sys.stderr, 'Template file:', op.template
-                    templateprops = (
-                        PropertyValue( "OverwriteStyles", 0, True, 0),
-                    )
+                    info(1, "Template file: %s" % op.template)
+                    templateprops = UnoProps(OverwriteStyles=True)
                     templateurl = unohelper.absolutize(self.cwd, unohelper.systemPathToFileUrl(op.template))
                     document.StyleFamilies.loadStylesFromURL(templateurl, templateprops)
                 else:
                     print >>sys.stderr, 'unoconv: template file `%s\' does not exist.' % op.template
                     exitcode = 1
 
-            info(1, "Selected output format: %s" % outputfmt)
-            info(1, "Selected office filter: %s" % outputfmt.filter)
-            info(1, "Used doctype: %s" % outputfmt.doctype)
-
             ### Update document links
+            phase = "update-links"
             try:
                 document.updateLinks()
             except AttributeError:
@@ -723,6 +766,7 @@ class Convertor:
                 pass
 
             ### Update document indexes
+            phase = "update-indexes"
             try:
                 document.refresh()
                 indexes = document.getDocumentIndexes()
@@ -734,18 +778,23 @@ class Convertor:
                 for i in range(0, indexes.getCount()):
                     indexes.getByIndex(i).update()
 
-            ### Write outputfile
-            outputprops = [
+            info(1, "Selected output format: %s" % outputfmt)
+            info(1, "Selected office filter: %s" % outputfmt.filter)
+            info(1, "Used doctype: %s" % outputfmt.doctype)
+
+            ### Export phase
+            phase = "export"
+            outputprops = UnoProps(FilterName=outputfmt.filter, OutputStream=OutputStream(), Overwrite=True, FilterData=tuple( op.exportfilter) )
 #                PropertyValue( "FilterData" , 0, ( PropertyValue( "SelectPdfVersion" , 0, 1 , uno.getConstantByName( "com.sun.star.beans.PropertyState.DIRECT_VALUE" ) ) ), uno.getConstantByName( "com.sun.star.beans.PropertyState.DIRECT_VALUE" ) ),
-                PropertyValue( "FilterData", 0, uno.Any("[]com.sun.star.beans.PropertyValue", tuple( op.exportfilter ), ), 0 ),
-                PropertyValue( "FilterName", 0, outputfmt.filter, 0),
-#                PropertyValue( "SelectionOnly", 0, True, 0 ),
-                PropertyValue( "OutputStream", 0, OutputStream(), 0 ),
-                PropertyValue( "Overwrite", 0, True, 0 ),
-            ]
 
             if outputfmt.filter == 'Text (encoded)':
-                outputprops.append(PropertyValue( "FilterFlags", 0, "UTF8, LF", 0))
+                outputprops += UnoProps(FilterOptions="UTF8, LF")
+
+            elif outputfmt.filter == 'Text':
+                outputprops += UnoProps(FilterOptions="UTF8")
+
+            elif outputfmt.filter == 'Text - txt - csv (StarCalc)':
+                outputprops += UnoProps(FilterOptions="44,34,0")
 
             if not op.stdout:
                 (outputfn, ext) = os.path.splitext(inputfn)
@@ -759,37 +808,63 @@ class Convertor:
                     outputfn = op.output
 
                 outputurl = unohelper.absolutize( self.cwd, unohelper.systemPathToFileUrl(outputfn) )
-                document.storeToURL(outputurl, tuple(outputprops) )
                 info(1, "Output file: %s" % outputfn)
             else:
-                document.storeToURL("private:stream", tuple(outputprops) )
+                outputurl = "private:stream"
 
+            try:
+                document.storeToURL(outputurl, tuple(outputprops) )
+            except IOException, e:
+                raise UnoException("Unable to store document to %s with properties %s. Exception: %s" % (outputurl, outputprops, e), None)
+
+            phase = "dispose"
             document.dispose()
             document.close(True)
 
         except SystemError, e:
-            error("unoconv: SystemError during conversion: %s" % e)
-            error("ERROR: The provided document cannot be converted to the desired format.")
+            error("unoconv: SystemError during %s phase: %s" % (phase, e))
             exitcode = 1
 
-        except UnoException, e:
-            error("unoconv: UnoException during conversion in %s (Error %d)" % (repr(e.__class__), e.ErrCode))
-            exitcode = e.ErrCode
+        except RuntimeException, e:
+            error("unoconv: RuntimeException during %s phase: Office probably died. %s" % (phase, e))
+            exitcode = 6
+
+        except DisposedException, e:
+            error("unoconv: DisposedException during %s phase: Office probably died. %s" % (phase, e))
+            exitcode = 7
+
+        except IllegalArgumentException, e:
+            error("UNO IllegalArgument during %s phase: Source file cannot be read. %s" % (phase, e))
+            exitcode = 8
 
         except IOException, e:
-            error("unoconv: IOException during conversion: %s" % e.Message)
-            error("ERROR: The provided document cannot be exported to %s." % outputfmt)
+#            for attr in dir(e): print '%s: %s', (attr, getattr(e, attr))
+            error("unoconv: IOException during %s phase: %s" % (phase, e.Message))
             exitcode = 3
 
         except CannotConvertException, e:
-            error("unoconv: CannotConvertException during conversion: %s" % e.Message)
+#            for attr in dir(e): print '%s: %s', (attr, getattr(e, attr))
+            error("unoconv: CannotConvertException during %s phase: %s" % (phase, e.Message))
             exitcode = 4
+
+        except UnoException, e:
+            if hasattr(e, 'ErrCode'):
+                error("unoconv: UnoException during %s phase in %s (ErrCode %d)" % (phase, repr(e.__class__), e.ErrCode))
+                exitcode = e.ErrCode
+                pass
+            if hasattr(e, 'Message'):
+                error("unoconv: UnoException during %s phase: %s" % (phase, e.Message))
+                exitcode = 5
+            else:
+                error("unoconv: UnoException during %s phase in %s" % (phase, repr(e.__class__)))
+                exitcode = 2
+                pass
 
 class Listener:
     def __init__(self):
         info(1, "Start listener on %s:%s" % (op.server, op.port))
         try:
-            subprocess.call([office.binary, "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--accept=%s" % op.connection], env=os.environ)
+            subprocess.call([office.binary, "-headless", "-invisible", "-nocrashreport", "-nodefault", "-nologo", "-nofirststartwizard", "-norestore", "-accept=%s" % op.connection], env=os.environ)
         except Exception, e:
             error("Launch of %s failed.\n%s" % (office.binary, e))
         else:
@@ -819,7 +894,7 @@ def die(ret, str=None):
         ### If there is a GUI now attached to the instance, disable listener
         if convertor.desktop.getCurrentFrame():
             try:
-                subprocess.Popen([office.binary, "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nofirststartwizard", "--nologo", "--norestore", "--unaccept=%s" % op.connection], env=os.environ)
+                subprocess.Popen([office.binary, "-headless", "-invisible", "-nocrashreport", "-nodefault", "-nofirststartwizard", "-nologo", "-norestore", "-unaccept=%s" % op.connection], env=os.environ)
                 info(2, 'LibreOffice listener successfully disabled.')
                 ooproc.wait()
             except Exception, e:
@@ -876,38 +951,42 @@ def main():
 #    except UnboundLocalError:
 #        die(252, "Failed to connect to remote listener.")
     except OSError:
-        error("Warning: failed to launch LibreOffice. Aborting.")
+        error("Warning: failed to launch Office suite. Aborting.")
 
 ### Main entrance
 if __name__ == '__main__':
     exitcode = 0
 
-    op = Options(sys.argv[1:])
-
     for of in find_offices():
-        if sys.executable != of.python:
-           python_switch(of)
-        office = of
-        break
-
-    if 'UNO_PATH' in os.environ:
-        office_environ(office)
+        if of.python != sys.executable and not sys.executable.startswith(of.unopath):
+            python_switch(of)
+        office_environ(of)
 #        debug_office()
-    try:
-        import uno, unohelper
-    except Exception:
-        print >>sys.stderr, "unoconv: Cannot find a suitable pyuno library and python binary combination on your system."
-        print >>sys.stderr, "ERROR: Please locate this library and send your feedback to: <tools@lists.rpmforge.net>."
-        print >>sys.stderr, sys.exc_info()[1]
+        try:
+            import uno, unohelper
+            office = of
+            break
+        except:
+            print >>sys.stderr, "unoconv: Cannot find a suitable pyuno library and python binary combination in %s" % of
+            print >>sys.stderr, "ERROR: Please locate this library and send your feedback to:"
+            print >>sys.stderr, "       http://github.com/dagwieers/unoconv/issues"
+            print >>sys.stderr, sys.exc_info()[1]
+            pass
+    else:
+        print >>sys.stderr, "unoconv: Cannot find a suitable office installation on your system."
+        print >>sys.stderr, "ERROR: Please locate your office installation and send your feedback to:"
+        print >>sys.stderr, "       http://github.com/dagwieers/unoconv/issues"
         sys.exit(1)
 
     ### Now that we have found a working pyuno library, let's import some classes
     from com.sun.star.beans import PropertyValue
     from com.sun.star.connection import NoConnectException
-    from com.sun.star.lang import DisposedException
+    from com.sun.star.document.UpdateDocMode import QUIET_UPDATE
+    from com.sun.star.lang import DisposedException, IllegalArgumentException
     from com.sun.star.io import IOException, XOutputStream
     from com.sun.star.script import CannotConvertException
     from com.sun.star.uno import Exception as UnoException
+    from com.sun.star.uno import RuntimeException
 
     ### And now that we have those classes, build on them
     class OutputStream( unohelper.Base, XOutputStream ):
@@ -922,6 +1001,20 @@ if __name__ == '__main__':
 
         def flush( self ):
             pass
+
+    def UnoProps(**args):
+        props = []
+        for key in args:
+            prop = PropertyValue()
+            prop.Name = key
+            prop.Value = args[key]
+            props.append(prop)
+        return tuple(props)
+
+    op = Options(sys.argv[1:])
+
+    info(2, "Office base location: %s" % office.basepath)
+    info(2, "Office binary location: %s" % office.unopath)
 
     try:
         main()
