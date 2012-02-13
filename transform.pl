@@ -42,7 +42,8 @@ use Carti::HtmlClean;
 use Carti::Common;
 use Carti::WikiTxtClean;
 
-my $DataQueue = Thread::Queue->new();
+my $DataQueue_html_clean = Thread::Queue->new();
+my $DataQueue_calibre_epub = Thread::Queue->new();
 my $max_html_parse_threads = 8;
 my $sema = Thread::Semaphore->new();
 
@@ -134,15 +135,16 @@ my $libreoo_home = $ENV{"HOME"}."/.libreoffice/";
 sub doc_to_html_macro {
     my $doc_file = shift;
     my ($name,$dir,$suffix) = fileparse($doc_file, qr/\.[^.]*/);
-    print "\t-Generating html file from $doc_file.\n";
+    Common::my_print "\tStart generating html file.\n";
     my $status;
     if ($first_time == 0) {
+	`kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
 	remove_tree("$libreoo_home") || die "Can't remove dir $libreoo_home: $!.\n" if -d "$libreoo_home";
 	system("$libreoo_path", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "libreoffice failed: $?";
 	copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", "$libreoo_home/3/user/basic/Standard/") or die "Copy failed libreoffice macros: $!\n";
 	$first_time++;
     }
-    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}')`;
+    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
 #     system("Xvfb $Xdisplay -screen 0 1024x768x16 &");
     eval {
 	local $SIG{ALRM} = sub { die "alarm\n" };
@@ -156,9 +158,9 @@ sub doc_to_html_macro {
 	printf "Error: Timed out: $status. Child exited with value %d\n", $status >> 8;
         `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
     } else {
-	print "\tFinished with status: $status.\n";
+	Common::my_print "\tFinished with status: $status.\n";
     }
-    print "\t+Generating html file from $doc_file.\n";
+    Common::my_print "\tStop generating html file.\n";
     return 0;
 }
 
@@ -252,9 +254,20 @@ sub get_documents {
 	my $work_dir = "$script_dir/$work_prefix/$key";
 	$work_dir =~ s/[:,]//g;
 	$files_to_import->{"$key"}->{"workdir"} = Common::normalize_text("$work_dir");
-	my $working_file = "$work_dir/$book$suffix";
+
+	my $working_file = "$work_dir/$book";
 	$working_file =~ s/[:,]//g;
-	$files_to_import->{"$key"}->{"workingfile"} = Common::normalize_text("$working_file");
+	$files_to_import->{"$key"}->{"workingfile"} = Common::normalize_text("$working_file")."$suffix";
+	$files_to_import->{"$key"}->{"html_file"} = Common::normalize_text("$working_file").".html";
+	$files_to_import->{"$key"}->{"html_file_orig"} = Common::normalize_text("$working_file")."_orig.html";
+	$files_to_import->{"$key"}->{"html_file_clean"} = Common::normalize_text("$working_file")."_clean.html";
+
+	if (defined $files_already_imported->{$key}) {
+	    my $crt_file = $files_already_imported->{$key};
+	    foreach my $akey (keys %$crt_file){
+		$files_to_import->{"$key"}->{$akey} = $crt_file->{$akey} if ! defined $files_to_import->{"$key"}->{$akey};
+	    }
+	}
     }
     print "Get all files.\n";
     find ({wanted => sub { add_document ($File::Find::name) if -f },},"$docs_prefix") if -d "$docs_prefix";
@@ -278,7 +291,7 @@ sub get_existing_documents {
 	my $title = $dir;
 	$dir = "$work_dir/$dir";
 	if (! -f "$dir/$control_file"){
-	    die "Remove wrong dir $dir.\n";
+	    print "Remove wrong dir $dir.\n";
 	    remove_tree("$dir") || die "Can't remove dir $dir: $!.\n";
 	    next;
 	}
@@ -301,22 +314,23 @@ sub synchronize_files {
 
 sub convert_images {
     my ($images, $work_dir) = @_;
-    my $orig_images = $images;
-    $images = ();
-    foreach (sort keys %$orig_images) {
+#     my $orig_images = $images;
+    my $cover = ();
+    foreach (sort keys %$images) {
 	my $orig_name = $_;
-	my $new_name = $orig_images->{$_};
+	my $new_name = $images->{$_};
 	if (! -f "$work_dir/$orig_name") {
-	    print "Missing image $work_dir/$orig_name.\n";
+	    die "Missing image $work_dir/$orig_name.\n";
 	    next;
 	}
 	print "\tConverting file $orig_name to $new_name.\n";
 	system("convert", "$work_dir/$orig_name", "-background", "white", "-flatten", "$work_dir/$new_name") == 0 or die "error runnig convert: $!.\n";
 
-	push @$images, "$work_dir/$new_name";
+# 	push @$images, "$work_dir/$new_name";
+	$cover = "$work_dir/$new_name" if $images->{$_} == 0;
 	unlink "$work_dir/$orig_name";
     }
-    return $images;
+    return $cover;
 }
 
 sub clean_html_from_wiki {
@@ -354,6 +368,9 @@ sub clean_html_from_oo {
     ## this should be minus?
     $html =~ s/\x{1e}/-/gsi;
     $html =~ s/\x{2}//gsi;
+    $html =~ s/&shy;//g;
+    $html =~ s/&nbsp;/ /g;
+
     my $tree = HtmlClean::get_tree($html);
     my $enc = HtmlClean::doc_tree_find_encoding($tree);
     ## start with fucking removing colors
@@ -437,30 +454,21 @@ sub import_to_wiki {
     $our_wiki->wiki_edit_page("$title", $wiki);
     return $wiki;
 }
-our $latest_locker :shared = "";
-sub libreoffice_to_epub {
-    my ($book, $mode) = @_;
-    return if defined $book->{"epub"} && $book->{"epub"} eq "done";
-    my ($file, $title) =($book->{"file"}, $book->{"title"});
-    my $working_file = $book->{"workingfile"};
-    my ($name,$dir,$ext) = fileparse($working_file, qr/\.[^.]*/);
-    my $work_dir = $book->{"workdir"};
-    my $html_file = "$work_dir/$name.html";
-    my $html_file_orig = "$work_dir/$name"."_orig.html";
-    my $html_file_clean = "$work_dir/$name"."_clean.html";
-    my $work;
-    print "****************** Working $mode for $title.\n";
 
-    $work = 0;
+sub libreoffice_to_html {
+    my $book = shift;
+    my ($file, $working_file, $work_dir, $title, $html_file, $html_file_orig) =($book->{"file"}, $book->{"workingfile"}, $book->{"workdir"}, $book->{"title"}, $book->{"html_file"}, $book->{"html_file_orig"});
+    Common::my_print_prepand("0. $title __ ");
+
+    my $work = 0;
     eval{
-    if (($mode eq "html") && !(defined $book->{"libreoffice"} && $book->{"libreoffice"} eq "done")) {
-	print "Doing the doc to html conversion for $title.\n";
+    if (!(defined $book->{"libreoffice"} && $book->{"libreoffice"} eq "done")) {
+	Common::my_print "Doing the doc to html conversion for $title.\n";
 	remove_tree("$work_dir") || die "Can't remove dir $work_dir: $!.\n" if -d "$work_dir";
 	Common::makedir($work_dir);
 	copy("$file", $working_file) or die "Copy failed $working_file: $!\n";
-	if (defined $book->{'coperta'}){copy($book->{'coperta'}, $work_dir) or die "Copy failed ".$book->{'coperta'}.": $!\n"};
 	my $res = doc_to_html_macro("$working_file");
-	if ($res || ! -s $html_file) {print "Can't generate html $html_file.\n"; return;};
+	die "Can't generate html $html_file.\n" if ($res || ! -s $html_file);# {; return $crt_thread;};
 	move("$html_file", "$html_file_orig") || die "can't move file $html_file.\n";
 	my $zip_file = "$work_dir/$title.zip";
 	Common::add_file_to_zip("$zip_file", "$file");
@@ -468,23 +476,31 @@ sub libreoffice_to_epub {
 	$book->{"libreoffice"} = "done";
 	$work++;
     }};
-    if ($@) {print "XXXX ERROR".Dumper($@). "error: $?.\n"; return;};
-    $DataQueue->enqueue($book) if ($mode eq "html") ;
+    if ($@) {print "XXXX ERROR".Dumper($@). "error: $?.\n"; return;}
+    $DataQueue_html_clean->enqueue($book);
     Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
-    return if $mode eq "html";
+}
 
-    $work = 0;
+# our $latest_locker :shared = "";
+sub libreoffice_html_clean {
+    my ($book, $crt_thread) = @_;
+    my ($file, $working_file, $work_dir, $title, $html_file_clean, $html_file_orig) =($book->{"file"}, $book->{"workingfile"}, $book->{"workdir"}, $book->{"title"}, $book->{"html_file_clean"}, $book->{"html_file_orig"});
+    Common::my_print_prepand("$crt_thread. $title __ ");
+
+    my $work = 0;
     my $html_file_orig_size = (-s "$html_file_orig");
-die Dumper($book) if ! defined $html_file_orig_size;
-    usleep(300000) while (! $sema->down_nb);#{print "Waiting for lock in \n\t$title \nfrom :\n\t$latest_locker.\n"; ;};
-    $latest_locker = $working_file;
+    return $crt_thread if ! defined $html_file_orig_size;
+
+    usleep(300000) while (! $sema->down_nb);
+#     while (! $sema->down_nb){usleep(300000); Common::my_print "Waiting for lock in \n\t$title \nfrom :\n\t$latest_locker.\n";
+#     $latest_locker = $working_file;
     $sema->up if ($html_file_orig_size < 3000000);
     eval {
-    if (($mode eq "epub") && !(defined $book->{"html_clean"} && $book->{"html_clean"} eq "done"  && -s $html_file_clean)) {
-	print "Doing the html cleanup for $title.\n";
+    if (!(defined $book->{"html_clean"} && $book->{"html_clean"} eq "done")  && -s $html_file_orig) {
+	Common::my_print "Doing the html cleanup for $title ($html_file_orig).\n";
 	my ($html, $images) = clean_html_from_oo(Common::read_file("$html_file_orig"), $work_dir);
-	$html =~ s/&shy;//g;
-	$images = convert_images ($images, $work_dir);
+	my $cover = convert_images ($images, $work_dir);
+	$book->{'coperta'} = $cover if ! defined $book->{'coperta'} && defined $cover;
 	$book->{'scurte'} = 1 if (length($html) <= 35000);
 	$book->{'medii'} = 1 if (length($html) >= 30000 && length($html) <= 450000);
 	$book->{'lungi'} = 1 if (length($html) >= 400000);
@@ -494,13 +510,20 @@ die Dumper($book) if ! defined $html_file_orig_size;
 	$work++;
     }};
     $sema->up if !($html_file_orig_size < 3000000);
-    if ($@) {print Dumper($@). "error: $?.\n"; return;};
+    if ($@) {print Dumper($@). "error: $?.\n"; return $crt_thread;};
+    $DataQueue_calibre_epub->enqueue($book);
     Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
 
-    $work = 0;
+    libreoffice_html_to_epub($book, $crt_thread);
+}
+
+sub libreoffice_html_to_epub {
+    my ($book, $crt_thread) = @_;
+    my ($work_dir, $title, $html_file_clean) =($book->{"workdir"}, $book->{"title"}, $book->{"html_file_clean"});
+    my $work = 0;
     eval {
-    if ($mode eq "epub" && -s $html_file_clean) {
-	print "Doing the epub for $title.\n";
+    if (-s $html_file_clean) {
+	Common::my_print "Doing the epub for $title.\n";
 	opendir(DIR, "$work_dir");
 	my @images = grep(/\.jpg$/,readdir(DIR));
 	closedir(DIR);
@@ -510,8 +533,171 @@ die Dumper($book) if ! defined $html_file_orig_size;
 	unlink "$html_file_clean" || die "Can't remove file $html_file_clean: $!\n";
 	$work++;
     }};
-    if ($@) {print Dumper($@). "error: $?.\n"; return;};
+    if ($@) {print Dumper($@). "error: $?.\n"; return $crt_thread;};
     Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
+}
+
+sub libreoffice_to_epub {
+#     my ($book, $mode, $crt_thread) = @_;
+#     return $crt_thread if defined $book->{"epub"} && $book->{"epub"} eq "done";
+#     my ($file, $title) =($book->{"file"}, $book->{"title"});
+#     my $working_file = $book->{"workingfile"};
+#     my ($name,$dir,$ext) = fileparse($working_file, qr/\.[^.]*/);
+#     my $work_dir = $book->{"workdir"};
+#     my $html_file = "$work_dir/$name.html";
+#     my $html_file_orig = "$work_dir/$name"."_orig.html";
+#     my $html_file_clean = "$work_dir/$name"."_clean.html";
+#     my $work;
+#     Common::my_print_prepand("$crt_thread. $title -- ");
+#     Common::my_print "****************** Working mode $mode for $title.\n";
+
+#     $work = 0;
+#     eval{
+#     if (($mode eq "html") && !(defined $book->{"libreoffice"} && $book->{"libreoffice"} eq "done")) {
+# 	Common::my_print "Doing the doc to html conversion for $title.\n";
+# 	remove_tree("$work_dir") || die "Can't remove dir $work_dir: $!.\n" if -d "$work_dir";
+# 	Common::makedir($work_dir);
+# 	copy("$file", $working_file) or die "Copy failed $working_file: $!\n";
+# 	if (defined $book->{'coperta'}){copy($book->{'coperta'}, $work_dir) or die "Copy failed ".$book->{'coperta'}.": $!\n"};
+# 	my $res = doc_to_html_macro("$working_file");
+# 	die "Can't generate html $html_file.\n" if ($res || ! -s $html_file);# {; return $crt_thread;};
+# 	move("$html_file", "$html_file_orig") || die "can't move file $html_file.\n";
+# 	my $zip_file = "$work_dir/$title.zip";
+# 	Common::add_file_to_zip("$zip_file", "$file");
+# 	unlink $working_file || die "Can't remove file $working_file: $!\n";
+# 	$book->{"libreoffice"} = "done";
+# 	$work++;
+#     }};
+#     if ($@) {print "XXXX ERROR".Dumper($@). "error: $?.\n"; return $crt_thread;};
+#     $DataQueue->enqueue($book) if ($mode eq "html") ;
+#     Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
+#     return $crt_thread if $mode eq "html";
+
+#     $work = 0;
+#     my $html_file_orig_size = (-s "$html_file_orig");
+#     return $crt_thread if ! defined $html_file_orig_size;
+# # die Dumper($html_file_orig, $html_file_orig_size, $book) if ! defined $html_file_orig_size;
+#     while (! $sema->down_nb){usleep(300000);} #Common::my_print "Waiting for lock in \n\t$title \nfrom :\n\t$latest_locker.\n"; 
+#     $latest_locker = $working_file;
+#     $sema->up if ($html_file_orig_size < 3000000);
+#     eval {
+#     if (($mode eq "epub") && !(defined $book->{"html_clean"} && $book->{"html_clean"} eq "done")  && -s $html_file_orig) {
+# 	Common::my_print "Doing the html cleanup for $title ($html_file_orig).\n";
+# 	my ($html, $images) = clean_html_from_oo(Common::read_file("$html_file_orig"), $work_dir);
+# 	my $cover = convert_images ($images, $work_dir);
+# 	$book->{"coperta"} = $cover if ! defined $book->{"coperta"} && defined $cover;
+# 	$book->{'scurte'} = 1 if (length($html) <= 35000);
+# 	$book->{'medii'} = 1 if (length($html) >= 30000 && length($html) <= 450000);
+# 	$book->{'lungi'} = 1 if (length($html) >= 400000);
+# 	Common::write_file("$html_file_clean", HtmlClean::html_tidy($html));
+# 	unlink "$html_file_orig" || die "Can't remove file $html_file_orig: $!\n";
+# 	$book->{"html_clean"} = "done";
+# 	$work++;
+#     }};
+#     $sema->up if !($html_file_orig_size < 3000000);
+#     if ($@) {print Dumper($@). "error: $?.\n"; return $crt_thread;};
+#     Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
+# return $crt_thread;
+#     $work = 0;
+#     eval {
+#     if ($mode eq "epub" && -s $html_file_clean) {
+# 	Common::my_print "Doing the epub for $title.\n";
+# 	opendir(DIR, "$work_dir");
+# 	my @images = grep(/\.jpg$/,readdir(DIR));
+# 	closedir(DIR);
+# 	html_to_epub("$html_file_clean", $book);
+# 	$book->{"epub"} = "done";
+# 	unlink "$work_dir/$_" foreach (@images);
+# 	unlink "$html_file_clean" || die "Can't remove file $html_file_clean: $!\n";
+# 	$work++;
+#     }};
+#     if ($@) {print Dumper($@). "error: $?.\n"; return $crt_thread;};
+#     Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
+}
+
+sub html_to_epub {
+    my ($html_file, $book) = @_;
+    my ($name, $dir, $ext) = fileparse($book->{"file"}, qr/\.[^.]*/);
+    my $authors = $book->{'auth'};
+    $name =  "$authors$url_sep$name";
+
+    $dir = "$script_dir/AAA___epubs";
+    Common::makedir("$dir");
+    my @tags = ();
+    push @tags, "scurte" if defined $book->{'scurte'};
+    push @tags, "medii" if defined $book->{'medii'};
+    push @tags, "lungi" if defined $book->{'lungi'};
+    push @tags, "ver=".$book->{'ver'} if defined $book->{'ver'};
+
+    $book->{'title'} =~ s/\"/\\"/g;
+    my ($name_fix, $html_file_fix) = ($name, $html_file);
+    $name_fix =~ s/\"/\\"/g;
+    $html_file_fix =~ s/\"/\\"/g;
+
+    my $epub_command = "$extra_tools_dir/calibre/ebook-convert";
+    my $epub_parameters = "--disable-font-rescaling --minimum-line-height=0 --toc-threshold=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --authors=\"$authors\" --title=\"".$book->{'title'}."\"";
+# --keep-ligatures --rating=between 1 and 5
+    $epub_parameters .= " --tags=\"".(join ',', @tags)."\"" if scalar @tags;
+    $epub_parameters .= " --series=\"".$book->{'seria'}."\" --series-index=\".$book->{'seria_no'}"."\"" if defined $book->{'seria'} && defined $book->{'seria_no'};
+    $epub_parameters .= " --cover=\"$book->{'coperta'}\"" if defined $book->{'coperta'};
+
+    my ($out_file, $out_file_fix, $in_file, $output);
+    ### normal epub
+    Common::my_print "Converting to epub.\n";
+    $in_file = "$html_file_fix";
+    $out_file_fix = "$dir/normal/$name_fix.epub";
+    $out_file = "$dir/normal/$name.epub";
+    Common::makedir("$dir/normal/");
+#     $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover`;
+#     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
+
+#     $in_file = "$out_file_fix";
+    ### epub with external font
+    Common::my_print "Converting to epub with external font.\n";
+    $out_file_fix = "$dir/external/$name_fix.epub";
+    $out_file = "$dir/external/$name.epub";
+    Common::makedir("$dir/external/");
+    $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"`;
+    die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
+
+    ### epub with embedded font
+    Common::my_print "Converting to epub with embedded font.\n";
+    $out_file = "$dir/internal/$name.epub";
+    $out_file_fix = "$dir/internal/$name_fix.epub";
+    Common::makedir("$dir/internal/");
+#     $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"`;
+#     Common::add_file_to_zip($out_file, "$script_dir/tools/$font");
+#     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
+
+    ### epub with ascii chars
+    Common::my_print "Converting to ascii epub.\n";
+    $out_file = "$dir/ascii/".Common::normalize_text("$name.epub");
+    $out_file_fix = "$dir/ascii/".Common::normalize_text("$name_fix.epub");
+    Common::makedir("$dir/ascii/");
+#     $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --asciiize`;
+#     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
+
+    ### normal mobi
+    Common::my_print "Converting to mobi.\n";
+    $out_file = "$dir/mobi/$name.mobi";
+    $out_file_fix = "$dir/mobi/$name_fix.mobi";
+    Common::makedir("$dir/mobi/");
+    $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters`;
+    die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
+
+#     ### mobi with ascii chars
+#     print "Converting to ascii mobi.\n";
+#     $out_file = Common::normalize_text("$dir/ascii_mobi/$name.mobi");
+#     Common::makedir("$dir/ascii_mobi/");
+#     $output = `$epub_command \"$in_file\" \"$out_file\" --asciiize $epub_parameters`;
+#     die "file $out_file not created.\n" if ! -s $out_file;
+
+#     ### normal fb2
+#     print "Converting to fb2.\n";
+#     $out_file = "$dir/fb2/$name.fb2";
+#     Common::makedir("$dir/fb2/");
+#     `$epub_command \"$in_file\" \"$out_file\" $epub_parameters`;
+    unlink $html_file;
 }
 
 sub import_html_to_wiki {
@@ -546,92 +732,6 @@ sub get_html_from_wikisite {
     my $html_file = "$work_dir/$book.html";
     my $q = `find \"$work_dir\" -print0 | grep -z \".html\$\" | xargs -0 -I {} mv {} \"$html_file\"`;
     return $html_file;
-}
-
-sub html_to_epub {
-    my ($html_file, $book) = @_;
-    my ($name, $dir, $ext) = fileparse($book->{"file"}, qr/\.[^.]*/);
-    my $authors = $book->{'auth'};
-    $name =  "$authors$url_sep$name";
-
-    $dir = "$script_dir/AAA___epubs";
-    Common::makedir("$dir");
-    my $coperta = $book->{"coperta"} if defined $book->{"coperta"};
-    my @tags = ();
-    push @tags, "scurte" if defined $book->{'scurte'};
-    push @tags, "medii" if defined $book->{'medii'};
-    push @tags, "lungi" if defined $book->{'lungi'};
-    push @tags, "ver=".$book->{'ver'} if defined $book->{'ver'};
-
-    $book->{'title'} =~ s/\"/\\"/g;
-    my ($name_fix, $html_file_fix) = ($name, $html_file);
-    $name_fix =~ s/\"/\\"/g;
-    $html_file_fix =~ s/\"/\\"/g;
-
-    my $epub_command = "$extra_tools_dir/calibre/ebook-convert";
-    my $epub_parameters = "--disable-font-rescaling --minimum-line-height=0 --toc-threshold=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --authors=\"$authors\" --title=\"".$book->{'title'}."\"";
-# --keep-ligatures --rating=between 1 and 5
-    $epub_parameters .= " --tags=\"".(join ',', @tags)."\"" if scalar @tags;
-    $epub_parameters .= " --series=\"".$book->{'seria'}."\" --series-index=\".$book->{'seria_no'}"."\"" if defined $book->{'seria'} && defined $book->{'seria_no'};
-    $epub_parameters .= " --cover=\"$coperta\"" if defined $coperta;
-
-    my ($out_file, $out_file_fix, $in_file, $output);
-    ### normal epub
-    print "Converting to epub.\n";
-    $in_file = "$html_file_fix";
-    $out_file_fix = "$dir/normal/$name_fix.epub";
-    $out_file = "$dir/normal/$name.epub";
-    Common::makedir("$dir/normal/");
-#     $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover`;
-#     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
-
-#     $in_file = "$out_file_fix";
-    ### epub with external font
-    print "Converting to epub with external font.\n";
-    $out_file_fix = "$dir/external/$name_fix.epub";
-    $out_file = "$dir/external/$name.epub";
-    Common::makedir("$dir/external/");
-    $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"`;
-    die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
-
-    ### epub with embedded font
-    print "Converting to epub with embedded font.\n";
-    $out_file = "$dir/internal/$name.epub";
-    $out_file_fix = "$dir/internal/$name_fix.epub";
-    Common::makedir("$dir/internal/");
-#     $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"`;
-#     Common::add_file_to_zip($out_file, "$script_dir/tools/$font");
-#     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
-
-    ### epub with ascii chars
-    print "Converting to ascii epub.\n";
-    $out_file = "$dir/ascii/".Common::normalize_text("$name.epub");
-    $out_file_fix = "$dir/ascii/".Common::normalize_text("$name_fix.epub");
-    Common::makedir("$dir/ascii/");
-#     $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters --no-default-epub-cover --asciiize`;
-#     die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
-
-    ### normal mobi
-    print "Converting to mobi.\n";
-    $out_file = "$dir/mobi/$name.mobi";
-    $out_file_fix = "$dir/mobi/$name_fix.mobi";
-    Common::makedir("$dir/mobi/");
-    $output = `$epub_command \"$in_file\" \"$out_file_fix\" $epub_parameters`;
-    die "file $out_file not created.\n".Dumper($in_file, $out_file, $output) if ! -s $out_file;
-
-#     ### mobi with ascii chars
-#     print "Converting to ascii mobi.\n";
-#     $out_file = Common::normalize_text("$dir/ascii_mobi/$name.mobi");
-#     Common::makedir("$dir/ascii_mobi/");
-#     $output = `$epub_command \"$in_file\" \"$out_file\" --asciiize $epub_parameters`;
-#     die "file $out_file not created.\n" if ! -s $out_file;
-
-#     ### normal fb2
-#     print "Converting to fb2.\n";
-#     $out_file = "$dir/fb2/$name.fb2";
-#     Common::makedir("$dir/fb2/");
-#     `$epub_command \"$in_file\" \"$out_file\" $epub_parameters`;
-    unlink $html_file;
 }
 
 sub clean_files {
@@ -721,39 +821,43 @@ sub ri_html_to_epub {
     Common::write_file(encode_utf8("__"."$html_file"), HtmlClean::html_tidy($html));
 }
 
-sub slave_threading {
+sub threading_html_clean {
     my $threads;
     my $running_thrd = 0;
     my $total_threads = 0;
+    my @thread = (1..$max_html_parse_threads);
+
     print "Starting threads for html clean and epub.\n";
     while (1) {
-	my $DataElement = $DataQueue->peek;
+	my $DataElement = $DataQueue_html_clean->peek;
 	last if defined $DataElement && $DataElement eq 'undef';
 	if (defined $DataElement && $running_thrd < $max_html_parse_threads){
 	    $total_threads++;
-	    $DataQueue->dequeue;
+	    $DataQueue_html_clean->dequeue;
 	    my $name = $DataElement->{'title'};
-	    print "\t\t$total_threads ===starting thread $name\n";
-	    my $t = threads->new(\&libreoffice_to_epub, $DataElement, "epub");
 	    $running_thrd++;
+	    my $crt_thread = shift @thread;
+# 	    print "\t\t$total_threads ++++starting thread $crt_thread\n";
+	    my $t = threads->new(\&libreoffice_html_clean, $DataElement, $crt_thread);
 	    $threads->{$name} = $t;
-	    print "\t\t$total_threads ***running threads $running_thrd\n";
+	    print "\t\tTotal threads: $total_threads, currently running threads: $running_thrd (".(join ';',(sort keys %$threads)).")\n";
 	} else {
 	    usleep(300000);
 	}
 	foreach my $thr (keys %$threads) {
 	    if ($threads->{$thr}->is_joinable()) {
-		$threads->{$thr}->join();
+		my $crt_thread = $threads->{$thr}->join();
 		delete $threads->{$thr};
 		$running_thrd--;
-		print "\t\t$total_threads ---done with $thr\n";
+		print "\t\tDone with thread $crt_thread: $thr\n";
+		push @thread, $crt_thread;
 	    }
 	}
     }
     print "Done, waiting for last threads.\n";
     foreach my $thr (keys %$threads) {
 	my $num = $threads->{$thr}->join();
-	print "\t\t$total_threads ---done with $thr\n";
+	print "\t\t$total_threads ----done with $thr\n";
     }
     print "FIN ($running_thrd)*******************.\n";
 }
@@ -762,13 +866,13 @@ sub transformer {
     my $files_to_import = synchronize_files;
     my $total = scalar (keys %$files_to_import);
     my $crt = 1;
-    my $t = threads->new(\&slave_threading);
+    my $t = threads->new(\&threading_html_clean);
 
     foreach my $file (sort keys %$files_to_import) {
 	my $type = $files_to_import->{$file}->{"type"};
 	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) {
-	    print "start working for book $file: $crt out of $total.\n";
-	    my ($html, $images) = libreoffice_to_epub($files_to_import->{$file}, "html");
+# 	    print "start working for book $file: $crt out of $total.\n";
+	    my ($html, $images) = libreoffice_to_html($files_to_import->{$file});
 # 	    import_html_to_wiki($html, $images, $files_to_import->{$file});
 # 	} elsif ($type =~ m/\.html?$/i) {
 	} elsif ($type =~ m/\.pdf$/i) {
@@ -779,7 +883,7 @@ sub transformer {
 	}
 	$crt++;
     }
-    $DataQueue->enqueue('undef');
+    $DataQueue_html_clean->enqueue('undef');
     $t->join();
 }
 
