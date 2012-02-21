@@ -84,11 +84,9 @@ sub my_print {
 }
 sub my_print_append {
   $str_append = shift;
-#   print "$message";
 }
 sub my_print_prepand {
   $str_prepand = shift;
-#   print "$message";
 }
 
 sub normalize_text {
