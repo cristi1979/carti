@@ -40,120 +40,6 @@ sub get_tree {
     return $tree;
 }
 
-# selector  property:value
-# h1	 {color:blue}
-# . - class
-# # - id
-# : - ??
-# the following rule matches any P element whose "class" attribute has been assigned a list of space-separated values that includes "pastoral" and "marine":
-# p.marine.pastoral { color: green }
-# sets the text color to blue whenever an EM occurs anywhere within an H1:
-# h1 em { color: blue }
-
-sub css_clean {
-    my $file = shift;
-    Common::my_print "\t".(++$counter)." Clean css.\n";
-    my $css = CSS::Tiny->new();
-    $css = CSS::Tiny->read( "$file" );
-    my @no_display = ();
-    my @delete_selectors = ();
-    foreach my $selector (keys %$css) {
-	my $bad=0;
-	foreach my $elem1 (split ' ', $selector) {
-	    my @search = ();
-	    foreach my $elem (split (/(?=[.:#])/, $elem1)) {
-		$elem =~ s/^\s*//g;
-		next if $elem =~ m/^\s*$/;
-		my ($tag, $id, $class, $unknown);
-		if ($elem =~ m/[^\.#:0-9a-z\-_]/i) {
-		    $bad++;
-		    last;
-		}
-		die "Unknown element: $elem\n" if $elem =~ m/[^\.#:0-9a-z\-_]/i;
-		if ($elem =~ m/^\.(.*)$/){
-		    $class = $1;
-		    push @search, ("class", $class);
-		} elsif ($elem =~ m/^#(.*)$/){
-		    $id = $1;
-		    push @search, ("id", $id);
-		} elsif ($elem =~ m/^\-(.*)$/){
-		    $unknown = $1;
-		} else {
-		    $tag = $elem;
-
-		    push @search, ("_tag", $tag);
-		}
-		## we don't like links or html
-		if (defined $tag && $tag =~ m/^(a|html)$/) {
-		    push @delete_selectors, $selector;
-		    $bad++;
-		    last;
-		}
-	    }
-	    next if $bad;
-	    foreach (keys %{$css->{$selector}}){
-		if ($_ eq "display" && $css->{$selector}->{$_} eq "none") {
-		    push @no_display, \@search;
-		    push @delete_selectors, $selector;
-		    last;
-		}
-	    }
-	}
-    }
-    delete $css->{$_} foreach @delete_selectors;
-
-    return ($css, @no_display);
-}
-
-sub wiki_tree_clean_css {
-    my ($tree, $work_dir) = @_;
-    Common::my_print "\t".(++$counter)." Clean css from wiki.\n";
-    my @css_files = ();
-    foreach my $a_tag ($tree->guts->look_down(_tag => 'link')) {
-	if (defined $a_tag->attr('rel') && $a_tag->attr('rel') eq "stylesheet") {
-	    my $css_file = "$work_dir/".uri_unescape($a_tag->attr('href'));
-	    push @css_files, $css_file if -s $css_file;
-	}
-    }
-
-    my $css_txt = "";
-    foreach my $a_tag ($tree->guts->look_down(_tag => 'style')) {
-	if (defined $a_tag->attr('type') && $a_tag->attr('type') eq "text/css") {
-	    $a_tag->detach;
-	    $css_txt .= $_ foreach ($a_tag->content_list());
-	}
-    }
-
-    $css_txt .= Common::read_file("$_"), unlink "1".$_ foreach (@css_files);
-    $css_txt .= 'p,table,li {line-height: 1.2em; font-size: .91em; margin: .5em;text-align:justify;}';
-#     $css_txt .= "p,table {text-indent: 2.0em;text-align:justify}";
-    $css_txt .= 'table.wikitable {margin: .5em;}';
-    $css_txt .= 'h1,h2,h3,h4,h5,h6,h7,h8 {text-align:center;}';
-    $css_txt =~ s/\@media only screen and \(max-device-width:[0-9]+px\){body{-webkit-text-size-adjust:none}}//gm;
-    $css_txt =~ s/\@media handheld\s*\{//gm;
-    $css_txt =~ s/\@media screen,handheld{//gm;
-    $css_txt =~ s/}}//gm;
-    Common::write_file("$work_dir/css_file.css", $css_txt);
-    $css_txt = `csstidy "$work_dir/css_file.css" --silent=true --discard_invalid_properties=true --merge_selectors=1`;
-    Common::write_file("$work_dir/css_file.css", $css_txt);
-    push @css_files, "$work_dir/css_file.css";
-    my ($css, @no_display) = css_clean("$work_dir/css_file.css");
-
-    foreach (@no_display) {
-	foreach my $a_tag ($tree->guts->look_down( @$_ )) {
-	    $a_tag->delete;
-	}
-    }
-    my $html_css = HTML::Element->new('~literal', 'text' => $css->write_string());
-    my $style = HTML::Element->new('style');
-    $style->push_content($html_css);
-    my $head = $tree->findnodes( '/html/head')->[0];
-    $head->push_content($style);
-    unlink "$_" foreach (@css_files);
-
-    return $tree;
-}
-
 sub doc_tree_clean_css_from_oo {
     my $tree = shift;
     Common::my_print "\t".(++$counter)." Clean css from oo.\n";
@@ -319,198 +205,6 @@ sub doc_tree_clean_pre {
 	}
     }
     return $tree;
-}
-
-sub wiki_tree_clean_wiki {
-    my $tree = shift;
-    Common::my_print "\t".(++$counter)." Clean wiki.\n";
-    my @to_delete = ();
-    push @to_delete, $tree->guts->look_down(_tag => 'link');
-    push @to_delete, $tree->guts->look_down(_tag => 'meta');
-    my $meta = HTML::Element->new("meta", 'http-equiv' => "Content-Type", 'content' => "text/html; charset=utf-8");
-    my $elem = $tree->findnodes( '/html/head')->[0];
-    $elem->preinsert($meta);
-
-    $elem = $tree->findnodes( '//div[@id="content"]')->[0];
-    $elem->replace_with_content;
-    $elem = $tree->findnodes( '//div[@id="bodyContent"]')->[0];
-    $elem->replace_with_content;
-
-    push @to_delete, $tree->findnodes( '//div[@id="footer"]');
-    push @to_delete, $tree->findnodes( '//div[@class="portal"]');
-    push @to_delete, $tree->findnodes( '//div[@id="siteSub"]');
-    push @to_delete, $tree->findnodes( '//div[@id="contentSub"]');
-    push @to_delete, $tree->findnodes( '//div[@id="catlinks"]');
-    push @to_delete, $tree->findnodes( '//div[@class="printfooter"]');
-    push @to_delete, $tree->findnodes( '//span[@id="External_links"]');
-    push @to_delete, $tree->findnodes( '//div[@id="section_SpokenWikipedia"]');
-    push @to_delete, $tree->findnodes( '//table[@class="metadata mbox-small plainlinks"]');
-    foreach my $elem ($tree->guts->descendants()) {
-	foreach my $attr_name ($elem->all_external_attr_names()) {
-	    next if $attr_name ne "style";
-	    foreach my $val (split ';', $elem->attr($attr_name)) {
-		next if $val !~ m/^\s*display\s*:\s*none\s*$/;
-		$elem->delete;
-	    }
-	}
-    }
-
-    $_->delete foreach @to_delete;
-    return $tree;
-}
-
-sub wiki_tree_fix_links {
-    my ($tree, $wiki_site) = @_;
-    my @images = ();
-    Common::my_print "\t".(++$counter)." Fix links from wiki.\n";
-    my $refs;
-    foreach (@{  $tree->extract_links()  }) {
-	my($link, $element, $attr, $tag) = @$_;
-	if ($tag eq "img") {
-	    push @images, $link;
-	} elsif ($tag eq "a") {
-	    if ($link =~ m/^$wiki_site/) {
-		$element->replace_with_content;
-	    } elsif ($link =~ m/#(.*)?$/) {
-		my $orig = "#$1";
-		my $new_name = $orig;
-		$new_name =~ s/:/_/gi;
-		$orig =~ s/^#//;
-		$refs->{$orig} = $new_name if $new_name ne "#".$orig;
-		die "check name $new_name.\n" if $new_name =~ m/[^a-z0-9_\-\.#]/i;
-		my $name = $element->attr("name");
-		my $href = $element->attr("href");
-		die "check href: $attr.\n" if $attr ne "href";
-		die "check name $name.\n" if defined $name;
-		$element->attr($attr, "$new_name");
-	    } else {
-		die "Hey, there's tag $tag that links to ", $link, ", in its $attr attribute.\n";
-	    }
-	} else {
-	    die "Hey, there's tag $tag that links to ", $link, ", in its $attr attribute.\n";
-	}
-    }
-
-    foreach my $a_tag ($tree->descendants()) {
-	foreach my $attr_name ($a_tag->all_external_attr_names()) {
-	    my $attr_value = $a_tag->attr($attr_name);
-	    next if ! defined $refs->{$attr_value};
-	    die "unknown attribute: $attr_name.\n" if $attr_name ne "id";
-	    my $value = $refs->{$attr_value};
-	    $value =~ s/^#//;
-	    $a_tag->attr($attr_name, $value);
-	    delete $refs->{$attr_value};
-	}
-    }
-    die Dumper($refs) if scalar keys %$refs;
-    return $tree, \@images;
-}
-
-sub wiki_tree_clean_body {
-    my $tree = shift;
-    Common::my_print "\t".(++$counter)." Clean script.\n";
-    foreach my $a_tag ($tree->guts->look_down(_tag => 'body')) {
-	foreach my $attr_name ($a_tag->all_external_attr_names()) {
-	    $a_tag->attr("$attr_name", undef);
-	}
-    }
-    return $tree;
-}
-
-sub wiki_tree_clean_script {
-    my ($tree, $work_dir) = @_;
-    Common::my_print "\t".(++$counter)." Clean script.\n";
-    foreach my $a_tag ($tree->guts->look_down(_tag => 'script')) {
-	my $file = $a_tag->attr("src");
-	unlink "$work_dir/".uri_unescape($file) if defined $file;
-	$a_tag->delete;
-    }
-    return $tree;
-}
-
-# A NAME="sdfootnote122anc" HREF="#sdfootnote122sym" CLASS="sdfootnoteanc"
-# DIV ID="sdfootnote122"
-# A NAME="sdfootnote122sym" HREF="#sdfootnote122anc" CLASS="sdfootnotesym-western"
-
-# A NAME="_ftnref11" HREF="#_ftn11"
-# DIV ID="ftn11" DIR="LTR">
-# A NAME="_ftn11" HREF="#_ftnref11"
-
-# <A NAME="cite_ref-0"></A>
-# <A HREF="#cite_note-0"><FONT COLOR="#7030a0"><SUP>[1]</SUP></FONT></A>
-# <A NAME="cite_note-0"></A>
-# <A HREF="#cite_ref-0">↑</A>
-sub doc_tree_fix_links_for_wiki {
-    my ($tree, $no_links) = @_;
-    Common::my_print "\t".(++$counter)." Fix links and notes for wiki.\n";
-    my $ref_hash = {};
-    my $footnote = {};
-    $footnote->{'1'} = [qr/sdfootnote([0-9]{1,})anc/, qr/sdfootnote([0-9]{1,})sym/];
-    $footnote->{'2'} = [qr/_ftnref([0-9]{1,})/, qr/_ftn([0-9]{1,})/];
-    $footnote->{'3'} = [qr/cite_ref-([0-9]{1,})/, qr/cite_note-([0-9]{1,})/];
-
-    my $images = {};
-    foreach (@{  $tree->extract_links()  }) {
-	my($link, $element, $attr, $tag) = @$_;
-	if ($tag eq "img" || $tag eq "body") {
-	    my $name_ext = Common::normalize_text(uri_unescape($link));
-	    $name_ext =~ s/^\.\.\///;
-	    my ($name,$dir,$ext) = fileparse($name_ext, qr/\.[^.]*/);
-	    my $new_name = $name."_conv.jpg";
-	    $images->{"$name$ext"} = "$new_name";
-	    $element->attr($attr, uri_escape $new_name);
-	} elsif ($tag eq "a") {
-	    my $is_footnote = 0;
-	    foreach (keys %$footnote){
-		my $anc = $footnote->{$_}[0];
-		my $sym = $footnote->{$_}[1];
-		$ref_hash->{$1}->{'h_anc'} = $element if ($link =~ m/^#$anc$/);
-		$ref_hash->{$1}->{'n_anc'} = $element if ($link =~ m/^$anc$/);
-		$ref_hash->{$1}->{'h_sym'} = $element if ($link =~ m/^#$sym$/);
-		$ref_hash->{$1}->{'n_sym'} = $element if ($link =~ m/^$sym$/);
-		$is_footnote = $_, last if $link =~ m/^#$anc$/ || $link =~ m/^#$sym$/;
-	    }
-	    if (! $is_footnote){
-		$element->replace_with_content();
-		die "Unknown a: $link with attr $attr\n" if $no_links;
-	    }
-	} else {
-	    $element->replace_with_content();
-	    Common::my_print "\t".(++$counter)." Hey, there's tag $tag that links to ", $link, ", in its $attr attribute.\n";
-	    die if $no_links;
-	}
-    }
-    foreach my $nr (sort keys %$ref_hash) {
-	die "Strange ref nr $nr.\n" if !defined $ref_hash->{$nr}->{'h_anc'} || !defined $ref_hash->{$nr}->{'h_sym'};
-	my $txt;
-	$txt = ($ref_hash->{$nr}->{'h_anc'}->look_up("_tag", 'p'))[0];
-# print Dumper($nr);
-	if (! defined $txt) {
-	    $txt = ($ref_hash->{$nr}->{'h_anc'}->look_up("_tag", 'h6'))[0];
-	    $txt = ($ref_hash->{$nr}->{'h_anc'}->look_up("_tag", 'h1'))[0] if ! defined $txt;
-	    $txt->tag('p');
-	}
-	my $a_ref = HTML::Element->new('ref');
-	my $have_text = 0;
-	if ($txt->parent->tag eq "div" && defined $txt->parent->attr('id') &&
-		($txt->parent->attr('id') =~ m/^sdfootnote/ || $txt->parent->attr('id') =~ m/^Section/)) {
-	    $txt = $txt->parent;
-	    foreach my $a_tag ($txt->look_down(_tag => 'p')) {
-		my $tmp = $a_tag->as_text;
-		$a_tag->detach;
-		$tmp =~ s/^\s*([0-9]+-?|\x{e2}\x{86}\x{91}|\x{5e})\s+//;
-		next if $tmp =~ m/^\s+$/gsm;
-		$a_ref->push_content($tmp, ['br_io']);
-		$have_text++;
-	    }
-	} else {
-	    die "still fixing notes.\n";
-	}
-	die "reference empty.\n" if ! $have_text;
-	$ref_hash->{$nr}->{'h_sym'}->replace_with( $a_ref ) if $have_text;
-    }
-
-    return ($tree, $images);
 }
 
 sub doc_tree_fix_links_from_oo {
@@ -703,7 +397,6 @@ sub doc_tree_fix_paragraphs_start {
     }
     return $tree;
 }
-
 
 sub doc_tree_remove_empty_font {
     my $tree = shift;
@@ -905,26 +598,6 @@ sub doc_tree_clean_b_i {
     return $tree;
 }
 
-sub doc_tree_fix_paragraph_center {
-    my $tree = shift;
-    Common::my_print "\t".(++$counter)." Fix paragraph centers.\n";
-    foreach my $a_tag ($tree->guts->look_down(_tag => "p")) {
-	my $exists_center = 0;
-	foreach my $attr_name ($a_tag->all_external_attr_names){
-	    my $attr_value = $a_tag->attr($attr_name);
-	    $exists_center++ if $attr_name eq "align" && $attr_value =~ m/center/i;
-	    $a_tag->attr($attr_name, undef);
-	}
-	if ($exists_center) {
-	    my $center = HTML::Element->new('center');
-	    $center->push_content($a_tag->clone);
-	    $a_tag->preinsert($center);
-	    $a_tag->detach;
-	}
-    }
-    return $tree;
-}
-
 sub doc_tree_fix_paragraph {
     my $tree = shift;
     Common::my_print "\t".(++$counter)." Fix paragraph.\n";
@@ -933,6 +606,7 @@ sub doc_tree_fix_paragraph {
 	    my $attr_value = $a_tag->attr($attr_name);
 	    if ($attr_name eq "style") {
 		my @attr_values = split ';', $attr_value;
+		my $new_attr_value = "";
 		foreach my $attr_val (@attr_values) {
 		    if ($attr_val =~ m/^\s*margin-(top|bottom|left|right): -?([0-9]+\.)?[0-9]+in\s*$/i
 			  || $attr_val =~ m/^\s*(text-indent|padding): -?([0-9]+\.)?[0-9]+in\s*$/i
@@ -947,12 +621,14 @@ sub doc_tree_fix_paragraph {
 			  || $attr_val =~ m/^\s*padding: (([0-9]+\.)?[0-9]+in\s*)+$/i
 			  || $attr_val =~ m/^\s*line-height: ([0-9]+\.)?[0-9]+in\s*$/i
 			) {
-			$a_tag->attr($attr_name, undef);
 		    } elsif ($attr_val =~ m/^\s*font-(weight|style): normal\s*$/i) {
+			$new_attr_value = "$new_attr_value;$attr_val";
 		    } else {
 			die "\t\tUnknown value for style in paragraph: $attr_val.\n";
 		    }
 		}
+		undef $new_attr_value if $new_attr_value eq "";
+		$a_tag->attr($attr_name, $new_attr_value);
 	    } elsif ($attr_name eq "align") {
 		die "\t\tUnknown value for align in paragraph: $attr_value.\n" if $attr_value !~ m/^(center|justify|left|right)$/i;
 	    } elsif ($attr_name eq "lang" || $attr_name eq "class" || $attr_name eq "dir") {
@@ -972,26 +648,34 @@ sub doc_tree_fix_center {
 	foreach my $b_tag ($a_tag->descendants) {
 	    next if $b_tag->tag ne "center";
 	    $b_tag->tag('p');
+Common::write_file("./q.html", $tree->as_HTML('<>&', "\t"));
+die "what the fuck is this?\n";
 	}
     }
     return $tree;
 }
 
+sub doc_tree_fix_a {
+    my $tree = shift;
+    Common::my_print "\t".(++$counter)." Fix <a>.\n";
+    foreach my $a_tag ($tree->guts->look_down(_tag => "a")) {
+	foreach my $attr_name ($a_tag->all_external_attr_names){
+	    $a_tag->attr("id", "s".$a_tag->attr($attr_name)) if ( $attr_name =~ m/^name$/i);
+	    $a_tag->attr($attr_name, undef) if ( $attr_name =~ m/^SDFIXED$/i);
+	}
+    }
+    return $tree;
+}
 
-sub clean_html_from_wiki {
-    my ($html, $work_dir, $wiki_site) = @_;
-    my $images = ();
-    my $tree = get_tree($html);
-    $tree = wiki_tree_clean_script($tree, $work_dir);
-    $tree = doc_tree_clean_color($tree);
-    $tree = wiki_tree_clean_css($tree, $work_dir);
-    $tree = wiki_tree_clean_wiki($tree);
-    ($tree, $images) = wiki_tree_fix_links($tree, $wiki_site);
-#     ($tree, $images) = doc_tree_fix_links_for_wiki($tree, $no_links);
-#     $tree = wiki_tree_clean_script($tree, "/dev/null");
-    $html = $tree->as_HTML('<>&', "\t");
-    $tree = $tree->delete;
-    return ($html, $images);
+sub doc_tree_clean_body {
+    my $tree = shift;
+    Common::my_print "\t".(++$counter)." Clean script.\n";
+    foreach my $a_tag ($tree->guts->look_down(_tag => 'body')) {
+	foreach my $attr_name ($a_tag->all_external_attr_names()) {
+	    $a_tag->attr("$attr_name", undef);
+	}
+    }
+    return $tree;
 }
 
 sub clean_html_from_ms {
@@ -1032,8 +716,9 @@ sub clean_html_from_oo {
     $tree = doc_tree_remove_empty_list($tree);
     $tree = doc_tree_clean_tables($tree);
     $tree = doc_tree_fix_center($tree);
-    $tree = wiki_tree_clean_body($tree);
+    $tree = doc_tree_clean_body($tree);
     $tree = doc_tree_fix_paragraph($tree);
+    $tree = doc_tree_fix_a($tree);
     $tree = doc_tree_clean_css_from_oo($tree);
     $tree = doc_tree_clean_sub($tree);
     $tree = doc_tree_clean_pre($tree);
@@ -1052,28 +737,24 @@ sub html_tidy {
     my $tidy = HTML::Tidy->new({ indent => "auto", tidy_mark => 0, doctype => 'omit',
 	char_encoding => "raw", clean => 'yes', preserve_entities => 0});
     $html = $tidy->clean($html);
-# Common::write_file("./q.html", $html);
+Common::write_file("./q.html", $html);
     my @msgs = $tidy->messages();
     foreach (@msgs) {
-	die Dumper($_) if $_->{'_text'} !~ m/^<style> inserting "type" attribute$/ &&
-		    $_->{'_text'} !~ m/^trimming empty <(i|u|b|p|sup)>$/ &&
-		    $_->{'_text'} !~ m/^nested emphasis <i>$/ &&
-		    $_->{'_text'} !~ m/^<a> converting backslash in URI to slash$/ &&
-		    $_->{'_text'} !~ m/^<table> lacks "summary" attribute$/ &&
-		    $_->{'_text'} !~ m/^<img> lacks "alt" attribute$/ &&
-		    $_->{'_text'} !~ m/^Document content looks like HTML 4.01 Strict$/ &&
-		    $_->{'_text'} !~ m/^Document content looks like HTML 4.01 Transitional$/ &&
-		    $_->{'_text'} !~ m#^Doctype given is "-//W3C//DTD HTML 4.0 Transitional//EN"$#;
-
-# 		    && $_->{'_text'} !~ m/^Document content looks like HTML Proprietary$/ &&
+	die Dumper($_) if $_->{'_text'} !~ m/^<style> inserting "type" attribute$/ 
+		    && $_->{'_text'} !~ m/^trimming empty <(i|u|b|p|sup)>$/ 
+		    && $_->{'_text'} !~ m/^nested emphasis <i>$/ 
+		    && $_->{'_text'} !~ m/^<a> converting backslash in URI to slash$/ 
+		    && $_->{'_text'} !~ m/^<table> lacks "summary" attribute$/ 
+		    && $_->{'_text'} !~ m/^<img> lacks "alt" attribute$/ 
+		    && $_->{'_text'} !~ m/^Document content looks like HTML 4.01 Strict$/ 
+		    && $_->{'_text'} !~ m/^Document content looks like HTML 4.01 Transitional$/ 
+		    && $_->{'_text'} !~ m/^<h[0-9]+> attribute "lang" lacks value$/ 
+		    && $_->{'_text'} !~ m#^Doctype given is "-//W3C//DTD HTML 4.0 Transitional//EN"$#
+		    && $_->{'_text'} !~ m/^Document content looks like HTML Proprietary$/
 # 		    $_->{'_text'} !~ m/^missing <li>$/ &&
-# 		    $_->{'_text'} !~ m/^<h[0-9]+> attribute "lang" lacks value$/ &&
-# 		    $_->{'_text'} !~ m/^<img> proprietary attribute value "absmiddle"$/ &&
 # 		    $_->{'_text'} !~ m/^<img> cannot copy name attribute to id$/ &&
 # 		    $_->{'_text'} !~ m/^<a> cannot copy name attribute to id$/ &&
-# 		    $_->{'_text'} !~ m/^<a> proprietary attribute "sdfixed"$/ &&
-# 		    $_->{'_text'} !~ m/^<a> anchor "_ftn[0-9]+" already defined$/ &&
-# 		    $_->{'_text'} !~ m/^<a> anchor "_ftnref[0-9]+" already defined$/
+# 		    $_->{'_text'} !~ m/^<a> anchor "_[a-b]i[0-9]+" already defined$/i &&
 # 		    ;
     }
     undef($tidy);
