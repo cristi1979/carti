@@ -225,6 +225,7 @@ sub doc_tree_fix_links_from_oo {
 	    $images->{"$name$ext"}->{"nr"} = $first_image++;
 	    $element->attr($attr, uri_escape $new_name);
 	} elsif ($tag eq "a") {
+	    $element->detach if $element->as_text =~ m/^\s*$/;
 	} else {
 	    $element->replace_with_content();
 	    Common::my_print "\t".(++$counter)." Hey, there's tag $tag that links to ", $link, ", in its $attr attribute.\n";
@@ -660,7 +661,7 @@ sub doc_tree_fix_a {
     Common::my_print "\t".(++$counter)." Fix <a>.\n";
     foreach my $a_tag ($tree->guts->look_down(_tag => "a")) {
 	foreach my $attr_name ($a_tag->all_external_attr_names){
-	    $a_tag->attr("id", "s".$a_tag->attr($attr_name)) if ( $attr_name =~ m/^name$/i);
+	    $a_tag->attr("id", "a".$a_tag->attr($attr_name)) if ( $attr_name =~ m/^name$/i);
 	    $a_tag->attr($attr_name, undef) if ( $attr_name =~ m/^SDFIXED$/i);
 	}
     }
