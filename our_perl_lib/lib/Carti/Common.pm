@@ -23,7 +23,7 @@ sub xmlfile_to_hash {
 sub hash_to_xmlfile {
     my ($hash, $name, $root_name) = @_;
     $root_name = "out" if ! defined $root_name;
-    $hash->{$_} = Encode::decode('utf8', $hash->{$_}) foreach (keys %$hash);
+    $hash->{$_} = $hash->{$_} foreach (keys %$hash);
 
     my $xs = new XML::Simple();
     unlink $name;

@@ -43,8 +43,8 @@ use Carti::Common;
 use Carti::WikiTxtClean;
 
 my $DataQueue = Thread::Queue->new();
-my $max_html_parse_threads = 8;
 my $sema = Thread::Semaphore->new();
+my $max_html_parse_threads = 8;
 
 my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
 my $extra_tools_dir = "$script_dir/tools";
