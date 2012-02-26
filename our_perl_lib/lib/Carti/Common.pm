@@ -76,6 +76,19 @@ sub read_file_from_zip {
     return $zip->contents($read_file);
 }
 
+our $str_append = "";
+our $str_prepand = "";
+sub my_print {
+  my $message = shift;
+  print "$str_prepand$message$str_append";
+}
+sub my_print_append {
+  $str_append = shift;
+}
+sub my_print_prepand {
+  $str_prepand = shift;
+}
+
 sub normalize_text {
     my $str = shift;
     ## from http://www.ahinea.com/en/tech/accented-translate.html
@@ -159,8 +172,8 @@ sub makedir {
     if (@$err) {
 	for my $diag (@$err) {
 	    my ($file, $message) = %$diag;
-	    if ($file eq '') { print "general error: $message.\n"; }
-	    else { print "problem unlinking $file: $message.\n"; }
+	    if ($file eq '') { Common::my_print "general error: $message.\n"; }
+	    else { Common::my_print "problem unlinking $file: $message.\n"; }
 	}
 	die "Can't make dir $dir: $!.\n";
     }
@@ -218,7 +231,7 @@ sub write_file {
     }
     $text = Encode::encode('utf8', $text);
     my ($name,$dir,$suffix) = fileparse($path, qr/\.[^.]*/);
-    print "\tWriting file $name$suffix.\n";
+    Common::my_print "\tWriting file $name$suffix.\n";
     open (FILE, ">$path") or die "at generic write can't open file $path for writing: $!\n";
     ### don't decode/encode to utf8 ???
     print FILE "$text";

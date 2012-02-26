@@ -50,10 +50,10 @@ Sub ReplaceNBHyphenHTML(cFile)
     oDoc = StarDesktop.loadComponentFromURL(cURL, "_blank", 0, Array())
 
     oReplace = ThisComponent.createReplaceDescriptor()
-	oReplace.SearchCaseSensitive = True
-	oReplace.SearchString = chr(clng("&H2011"))
-	oReplace.ReplaceString = "-"
-	ThisComponent.ReplaceAll(oReplace)
+    oReplace.SearchCaseSensitive = True
+    oReplace.SearchString = chr(clng("&H2011"))
+    oReplace.ReplaceString = "-"
+    ThisComponent.ReplaceAll(oReplace)
 
     sFile = GetFileNameWithoutExtension(oDoc.url) + ".html"
     sURL = ConvertToURL( sFile )
