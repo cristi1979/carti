@@ -21,7 +21,7 @@ BEGIN {
 use File::Find;
 use File::Copy;
 use lib (fileparse(abs_path($0), qr/\.[^.]*/))[1]."our_perl_lib/lib";
-use Devel::Size qw(size);
+# use Devel::Size qw(size);
 
 use HTML::WikiConverter;
 use File::Path qw(make_path remove_tree);
@@ -42,12 +42,8 @@ use Carti::HtmlClean;
 use Carti::Common;
 use Carti::WikiTxtClean;
 
-<<<<<<< HEAD
-my $DataQueue = Thread::Queue->new();
-=======
 my $DataQueue_html_clean = Thread::Queue->new();
 my $DataQueue_calibre_epub = Thread::Queue->new();
->>>>>>> d4751b83af0befc01f6f0ed9902da03d8a8e429f
 my $sema = Thread::Semaphore->new();
 my $max_html_parse_threads = 8;
 
@@ -67,7 +63,8 @@ our $duplicate_files = {};
 my $duplicate_file = "$script_dir/duplicate_files";
 
 my $control_file = "doc_info_file.xml";
-my $work_prefix = "/media/carti/work";
+# my $work_prefix = "/media/carti/work";
+my $work_prefix = "$script_dir/work";
 my $epub_dir = "$work_prefix/../AAA___epubs";
 
 my $debug = 1;
@@ -411,7 +408,7 @@ sub libreoffice_html_clean {
     }};
     delete $waiters{$title};
     $sema->up if !($html_file_orig_size < $file_max_size_single_thread);
-    if ($@) {print Dumper($title, $@). "error: $?.\n"; return $crt_thread;};
+    if ($@) {die Dumper($title, $@). "error: $?.\n"; return $crt_thread;};
     $DataQueue_calibre_epub->enqueue($book);
     Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
 

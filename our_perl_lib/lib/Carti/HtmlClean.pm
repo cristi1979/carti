@@ -661,7 +661,7 @@ sub doc_tree_fix_a {
     Common::my_print "\t".(++$counter)." Fix <a>.\n";
     foreach my $a_tag ($tree->guts->look_down(_tag => "a")) {
 	foreach my $attr_name ($a_tag->all_external_attr_names){
-	    $a_tag->attr("id", "a".$a_tag->attr($attr_name)) if ( $attr_name =~ m/^name$/i);
+# 	    $a_tag->attr("id", "a".$a_tag->attr($attr_name)) if ( $attr_name =~ m/^name$/i);
 	    $a_tag->attr($attr_name, undef) if ( $attr_name =~ m/^SDFIXED$/i);
 	}
     }
@@ -700,6 +700,7 @@ sub clean_html_from_oo {
 
     my $tree = get_tree($html);
     my $enc = doc_tree_find_encoding($tree);
+    my $txt1 = $tree->as_text;
     ## start with fucking removing colors
     $tree = doc_tree_clean_color($tree) if $colors !~ m/^yes$/i;
 # Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
@@ -726,8 +727,11 @@ sub clean_html_from_oo {
 #     $tree = doc_tree_fix_paragraphs_start($tree);
     $tree = doc_find_unknown_elements($tree);
     $html = $tree->as_HTML('<>&', "\t");
+    my $txt2 = $tree->as_text;
     $tree = $tree->delete;
     undef ($tree);
+    $txt1 =~ s/\s+//g;    $txt2 =~ s/\s+//g;
+    die "Text mismatch.\n" if $txt1 ne $txt2;
 # Common::write_file("/home/cristi/programe/carti/work_wiki//cleaned.html", $html);
     return (html_tidy($html), $images);
 }
@@ -741,20 +745,21 @@ sub html_tidy {
 Common::write_file("./q.html", $html);
     my @msgs = $tidy->messages();
     foreach (@msgs) {
-	die Dumper($_) if $_->{'_text'} !~ m/^<style> inserting "type" attribute$/ 
-		    && $_->{'_text'} !~ m/^trimming empty <(i|u|b|p|sup)>$/ 
-		    && $_->{'_text'} !~ m/^nested emphasis <i>$/ 
-		    && $_->{'_text'} !~ m/^<a> converting backslash in URI to slash$/ 
-		    && $_->{'_text'} !~ m/^<table> lacks "summary" attribute$/ 
-		    && $_->{'_text'} !~ m/^<img> lacks "alt" attribute$/ 
-		    && $_->{'_text'} !~ m/^Document content looks like HTML 4.01 Strict$/ 
-		    && $_->{'_text'} !~ m/^Document content looks like HTML 4.01 Transitional$/ 
-		    && $_->{'_text'} !~ m/^<h[0-9]+> attribute "lang" lacks value$/ 
+	die Dumper($_) if $_->{'_text'} !~ m/^<style> inserting "type" attribute$/
+		    && $_->{'_text'} !~ m/^trimming empty <(i|u|b|p|sup)>$/
+		    && $_->{'_text'} !~ m/^nested emphasis <i>$/
+		    && $_->{'_text'} !~ m/^<a> converting backslash in URI to slash$/
+		    && $_->{'_text'} !~ m/^<table> lacks "summary" attribute$/
+		    && $_->{'_text'} !~ m/^<img> lacks "alt" attribute$/
+		    && $_->{'_text'} !~ m/^Document content looks like HTML 4.01 Strict$/
+		    && $_->{'_text'} !~ m/^Document content looks like HTML 4.01 Transitional$/
+		    && $_->{'_text'} !~ m/^<h[0-9]+> attribute "lang" lacks value$/
 		    && $_->{'_text'} !~ m#^Doctype given is "-//W3C//DTD HTML 4.0 Transitional//EN"$#
 		    && $_->{'_text'} !~ m/^Document content looks like HTML Proprietary$/
+		    && $_->{'_text'} !~ m/^<a> cannot copy name attribute to id$/
+		    && $_->{'_text'} !~ m/^<img> anchor "[a-z0-9_ ]+" already defined$/i
 # 		    $_->{'_text'} !~ m/^missing <li>$/ &&
 # 		    $_->{'_text'} !~ m/^<img> cannot copy name attribute to id$/ &&
-# 		    $_->{'_text'} !~ m/^<a> cannot copy name attribute to id$/ &&
 # 		    $_->{'_text'} !~ m/^<a> anchor "_[a-b]i[0-9]+" already defined$/i &&
 # 		    ;
     }
