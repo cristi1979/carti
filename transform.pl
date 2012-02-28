@@ -625,11 +625,11 @@ sub threading_my_shit {
 }
 
 sub transformer {
+    my $t = threads->new(\&threading_my_shit, \&libreoffice_html_clean, $DataQueue_html_clean, 2, "  clean");
+    my $w = threads->new(\&threading_my_shit, \&libreoffice_html_to_epub, $DataQueue_calibre_epub, 3, "   epub");
     my $files_to_import = synchronize_files;
     my $total = scalar (keys %$files_to_import);
     my $crt = 1;
-    my $t = threads->new(\&threading_my_shit, \&libreoffice_html_clean, $DataQueue_html_clean, 2, "  clean");
-    my $w = threads->new(\&threading_my_shit, \&libreoffice_html_to_epub, $DataQueue_calibre_epub, 3, "   epub");
 
     foreach my $file (sort keys %$files_to_import) {
 	my $type = $files_to_import->{$file}->{"type"};
