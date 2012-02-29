@@ -6,6 +6,7 @@ package Common;
 use warnings;
 use strict;
 
+use Digest::MD5 qw(md5 md5_hex md5_base64);
 use File::Basename;
 use File::Path qw(make_path remove_tree);
 use Data::Dumper;
@@ -181,7 +182,7 @@ sub makedir {
 
 sub read_file {
     my $file = shift;
-    open (FILEHANDLE, "$file") or die "at wiki from html Can't open file $file: ".$!."\n";
+    open (FILEHANDLE, "$file") or die "Can't open for read file $file: ".$!."\n";
     my $txt = do { local $/; <FILEHANDLE> };
     close (FILEHANDLE);
     return $txt;

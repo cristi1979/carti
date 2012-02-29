@@ -17,7 +17,7 @@ use CSS::Tiny;
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 use HTML::TreeBuilder::XPath;
-use HTML::TreeBuilder;
+# use HTML::TreeBuilder;
 # use XML::LibXML;
 use Cwd 'abs_path';
 use File::Basename;
@@ -35,8 +35,9 @@ sub new {
 sub get_tree {
     my $html = shift;
     Common::my_print "\t".(++$counter)." Building html tree.\n";
-    my $tree = HTML::TreeBuilder->new();
+    my $tree = HTML::TreeBuilder::XPath->new();
     $tree = $tree->parse_content(decode_utf8($html));
+    $tree->eof();
     return $tree;
 }
 
@@ -55,6 +56,7 @@ sub doc_tree_clean_css_from_oo {
     $style->push_content($css_txt);
     my $head = $tree->findnodes( '/html/head')->[0];
     $head->push_content($style);
+#     $style->delete;
     return $tree;
 }
 
@@ -382,16 +384,13 @@ sub doc_tree_fix_paragraphs_start {
     foreach my $a_tag ($tree->guts->look_down(_tag => "p")) {
 	foreach my $content_tag ($a_tag->content_refs_list) {
 	    last if ref $$content_tag;
-	    if ($$content_tag =~ m/^\s*[-\x{2015}\x{2013}]/i) {
+	    if ($$content_tag =~ m/^\s*[-\x{2015}\x{2013}\x{2014}]/i) {
 # 		print "Fixing ".($a_tag->as_text).").\n";
-		$$content_tag =~ s/^(\s*)(-|\x{2015}|\x{2013})+\s*/$1\x{2014} /;
+		$$content_tag =~ s/^\s*(-|\x{2015}|\x{2013}|\x{2014})+\s*(\p{L})/\x{2014} $2/i;
 		last;
 	    }
 	    die "Paragraph starts with : ".(encode_utf8($$content_tag)).":$$content_tag (".($a_tag->as_text).").\n" if
-# 		  $a_tag->as_text !~ m/^\s*[\p{L} 0-9 !@#$%^&*()\[\]{};'\\:"|,\.\/<>\?]/i &&
-# 		  $a_tag->as_text !~ m/^\s*\x{e2}\x{80}\x{94}/i &&
 		      $a_tag->as_text !~ m/^\s*(\x{2014}|\x{a9}|\x{25a0}|\x{2022}|\x{201c}|\x{2018}|\x{201e}|\x{2026}|\x{201d}|\x{be}|\x{a7}|\x{bb}|\x{ab})/i &&
-# 		      encode_utf8($$content_tag) !~ m/^\s*\x{e2}\x{80}\x{94}/i &&
 		      $a_tag->as_text !~ m/^\s*[\p{L} a-z0-9 !@#$%^&*()\[\]{};'\\:"|,\.\/<>\_?~`]/i &&
 		      $a_tag->as_text !~ m/^\s*$/i;
 	}
@@ -697,20 +696,21 @@ sub clean_html_from_oo {
     $html =~ s/\x{2}//gsi;
     $html =~ s/&shy;//g;
     $html =~ s/&nbsp;/ /g;
+    my ($txt1, $txt2, $images);
 
     my $tree = get_tree($html);
+#     eval{
     my $enc = doc_tree_find_encoding($tree);
-    my $txt1 = $tree->as_text;
+    $tree = doc_tree_remove_TOC($tree);
+    $txt1 = $tree->as_trimmed_text;
     ## start with fucking removing colors
     $tree = doc_tree_clean_color($tree) if $colors !~ m/^yes$/i;
-# Common::write_file("/home/cristi/programe/carti/work_wiki/".$i++." html.html", $tree->as_HTML('<>&', "\t"));
     $tree = doc_tree_clean_font($tree);
     $tree = doc_tree_remove_empty_font($tree);
     $tree = doc_tree_clean_span($tree);
     $tree = doc_tree_remove_empty_span($tree);
     $tree = doc_tree_clean_defs($tree);
-    $tree = doc_tree_remove_TOC($tree);
-    ($tree, my $images) = doc_tree_fix_links_from_oo($tree, $no_links);
+    ($tree, $images) = doc_tree_fix_links_from_oo($tree, $no_links);
     $tree = doc_tree_clean_h($tree, 0);
     $tree = doc_tree_clean_div($tree);
     $tree = doc_tree_clean_multicol($tree);
@@ -724,15 +724,21 @@ sub clean_html_from_oo {
     $tree = doc_tree_clean_css_from_oo($tree);
     $tree = doc_tree_clean_sub($tree);
     $tree = doc_tree_clean_pre($tree);
-#     $tree = doc_tree_fix_paragraphs_start($tree);
+# $html = $tree->as_HTML('<>&', "\t");Common::write_file("./html1.html", $html);
+    $txt2 = $tree->as_trimmed_text;
+    $tree = doc_tree_fix_paragraphs_start($tree);
     $tree = doc_find_unknown_elements($tree);
+#     };
     $html = $tree->as_HTML('<>&', "\t");
-    my $txt2 = $tree->as_text;
-    $tree = $tree->delete;
+    $tree = $tree->delete();
     undef ($tree);
-    $txt1 =~ s/\s+//g;    $txt2 =~ s/\s+//g;
+#     die "$@" if ($@);
+# Common::write_file("./html2.html", $html);
+# $txt1 =~ s/,/\n/g;    $txt2 =~ s/,/\n/g;
+# Common::write_file("./txt1.html", $txt1);
+# Common::write_file("./txt2.html", $txt2);
+# exit 12;
     die "Text mismatch.\n" if $txt1 ne $txt2;
-# Common::write_file("/home/cristi/programe/carti/work_wiki//cleaned.html", $html);
     return (html_tidy($html), $images);
 }
 
@@ -742,10 +748,10 @@ sub html_tidy {
     my $tidy = HTML::Tidy->new({ indent => "auto", tidy_mark => 0, doctype => 'omit',
 	char_encoding => "raw", clean => 'yes', preserve_entities => 0});
     $html = $tidy->clean($html);
-Common::write_file("./q.html", $html);
     my @msgs = $tidy->messages();
+    undef($tidy);
     foreach (@msgs) {
-	die Dumper($_) if $_->{'_text'} !~ m/^<style> inserting "type" attribute$/
+	die $_ if $_->{'_text'} !~ m/^<style> inserting "type" attribute$/
 		    && $_->{'_text'} !~ m/^trimming empty <(i|u|b|p|sup)>$/
 		    && $_->{'_text'} !~ m/^nested emphasis <i>$/
 		    && $_->{'_text'} !~ m/^<a> converting backslash in URI to slash$/
@@ -763,7 +769,6 @@ Common::write_file("./q.html", $html);
 # 		    $_->{'_text'} !~ m/^<a> anchor "_[a-b]i[0-9]+" already defined$/i &&
 # 		    ;
     }
-    undef($tidy);
     return $html;
 }
 

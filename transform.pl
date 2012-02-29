@@ -21,9 +21,7 @@ BEGIN {
 use File::Find;
 use File::Copy;
 use lib (fileparse(abs_path($0), qr/\.[^.]*/))[1]."our_perl_lib/lib";
-# use Devel::Size qw(size);
 
-use HTML::WikiConverter;
 use File::Path qw(make_path remove_tree);
 use Encode;
 use Data::Dumper;
@@ -32,26 +30,12 @@ use URI::Escape;
 use Time::HiRes qw(usleep nanosleep);
 use File::stat;
 
-use threads;
-use threads::shared;
-use Thread::Semaphore;
-use Thread::Queue;
-
-use Carti::WikiWork;
 use Carti::HtmlClean;
 use Carti::Common;
 use Carti::WikiTxtClean;
 
-my $DataQueue_html_clean = Thread::Queue->new();
-my $DataQueue_calibre_epub = Thread::Queue->new();
-my $sema = Thread::Semaphore->new();
-my $max_html_parse_threads = 8;
-
 my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
 my $extra_tools_dir = "$script_dir/tools";
-my $wiki_site = "http://192.168.0.163/wiki";
-my ($wiki_user, $wiki_pass, $wiki_original_files) = ("admin", "qwaszx", "$wiki_site/fisiere_originale");
-my $our_wiki;
 
 my $workign_mode = shift;
 my $docs_prefix = shift;
@@ -68,9 +52,34 @@ my $work_prefix = "$script_dir/work";
 my $epub_dir = "$work_prefix/../AAA___epubs";
 
 my $debug = 1;
+my $focker = 1;
 my $url_sep = " -- ";
 my $font = "BookmanOS.ttf";
 my $Xdisplay = ":12345";
+
+use threads;
+use threads::shared;
+use Thread::Semaphore;
+use Thread::Queue;
+my $DataQueue_html_clean = Thread::Queue->new();
+my $DataQueue_calibre_epub = Thread::Queue->new();
+my $sema = Thread::Semaphore->new();
+
+# use Devel::Size qw(size total_size);
+# sub get_mem_info {
+#     my @proc_mem = split /\s+/, Common::read_file("/proc/$$/stat");
+#     my ($stat_threads, $stat_vsize, $stat_rss) = ($proc_mem[19], $proc_mem[22]/1024, $proc_mem[23]/1024);
+#     my @system_mem = split /\n/, Common::read_file("/proc/meminfo");
+#     s/(^[a-z]+:\s+)//i for(@system_mem);
+#     s/(\s+[a-z]+$)//i for(@system_mem);
+#     my ($sys_mem, $sys_mem_free, $sys_cache) = ($system_mem[0], $system_mem[1], $system_mem[3]);
+#     print Dumper(
+# "html queue ".total_size($DataQueue_html_clean),
+# "calibre queue ".total_size($DataQueue_calibre_epub),
+# "semaphore ".total_size($sema),
+# );
+#     return ($stat_threads, $stat_vsize, $stat_rss, $sys_mem, $sys_mem_free, $sys_cache);
+# }
 
 sub get_files_from_dir {
     my $dir_q = shift;
@@ -358,18 +367,9 @@ sub libreoffice_to_html {
 }
 
 my %waiters :shared;
-sub libreoffice_html_clean {
-    my ($book, $crt_thread) = @_;
-    my $file_max_size_single_thread = 5000000;
-# return $crt_thread;
-    my ($file, $working_file, $work_dir, $title, $html_file_clean, $html_file_orig) =($book->{"file"}, $book->{"workingfile"}, $book->{"workdir"}, $book->{"title"}, $book->{"html_file_clean"}, $book->{"html_file_orig"});
-
-    my $work = 0;
-    my $html_file_orig_size = (-s "$html_file_orig");
-    return $crt_thread if ! defined $html_file_orig_size;
-    $waiters{$title} = $crt_thread;
+sub to_wait_or_not_to_wait {
+    my ($html_file_orig_size, $title, $file_max_size_single_thread) = @_;
     $sema->down;
-#     while (! $sema->down_nb){usleep(300000); Common::my_print "Waiting for lock in \n\t$title \nfrom :\n\t$latest_locker.\n";
     if ($html_file_orig_size < $file_max_size_single_thread){
 	$sema->up;
     } else {
@@ -378,37 +378,62 @@ sub libreoffice_html_clean {
 	    my $worker = "";
 	    foreach (sort keys %waiters){
 		$max = $waiters{$_} if $max < $waiters{$_};
-		$worker .= "$_;" if $waiters{$_} > 100;
+		$worker .= "$_ " if $waiters{$_} >= 100 && $_ ne $title;
 	    };
 	    last if $max<100;
 	    my $str = "";
 	    $str .= "\t\t$_: $waiters{$_}.\n" foreach (sort keys %waiters);
-	    Common::my_print "Waiting in $title. Working: $worker. Others : \n$str\n";
+	    Common::my_print "Waiting for worker: $worker. Others : \n$str\n";
 	    sleep 1;
 	}
     }
-    $waiters{$title} = $crt_thread*100;
+}
 
+sub libreoffice_html_clean {
+    my ($book, $crt_thread) = @_;
+    my $file_max_size_single_thread = 10000000;
+# return $crt_thread;
+    my ($file, $working_file, $work_dir, $title, $html_file_clean, $html_file_orig) =($book->{"file"}, $book->{"workingfile"}, $book->{"workdir"}, $book->{"title"}, $book->{"html_file_clean"}, $book->{"html_file_orig"});
+
+    my $html_file_orig_size = (-s "$html_file_orig");
+    return $crt_thread if ! defined $html_file_orig_size;
+    $waiters{$title} = $crt_thread;
+    to_wait_or_not_to_wait($html_file_orig_size, $title, $file_max_size_single_thread);
+    $waiters{$title} = $crt_thread*100;
+    my $work = 0;
     eval {
     if (!(defined $book->{"html_clean"} && $book->{"html_clean"} eq "done")  && -s $html_file_orig) {
 	Common::my_print "Doing the html cleanup for $title.\n";
-	my $obj = new HtmlClean;
-	my ($html, $images) = $obj->clean_html_from_oo(Common::read_file($html_file_orig));
-# 	my $html = Common::read_file("$html_file_orig"); my $images;
-	Common::write_file("$html_file_clean", $html);
+	my ($html, $cover);
+	my $pid = 0;
+	$pid = fork() if $focker;
+	die "Can't fork this shit.\n" if (not defined $pid);
+	if ($pid==0) {
+	    my $obj = new HtmlClean;
+	    eval{
+	    ($html, my $images) = $obj->clean_html_from_oo(Common::read_file($html_file_orig)); ## this leaks like a pregnant women
+	    $cover = convert_images ($images, $work_dir);
+	    undef $obj;
+	    Common::write_file($html_file_clean, $html)
+	    };
+	    threads->exit if $focker;
+	    die $@;
+	} else {
+	    waitpid($pid, 0);
+	    die "exit abnormally from child $pid." if ! -s $html_file_clean;
+	}
+	$html = Common::read_file($html_file_clean) if $focker;
 	$book->{'scurte'} = 1 if (length($html) <= 35000);
 	$book->{'medii'} = 1 if (length($html) >= 30000 && length($html) <= 450000);
 	$book->{'lungi'} = 1 if (length($html) >= 400000);
-	unlink "$html_file_orig" || die "Can't remove file $html_file_orig: $!\n";
-	my $cover = convert_images ($images, $work_dir);
 	$book->{'coperta'} = $cover if ! defined $book->{'coperta'} && defined $cover;
 	$book->{"html_clean"} = "done";
+	unlink "$html_file_orig" || die "Can't remove file $html_file_orig: $!\n";
 	$work++;
-	undef $obj;
     }};
     delete $waiters{$title};
     $sema->up if !($html_file_orig_size < $file_max_size_single_thread);
-    if ($@) {die Dumper($title, $@). "error: $?.\n"; return $crt_thread;};
+    if ($@) {Common::my_print Dumper($title, $@). "error: $?.\n"; return $crt_thread;};
     $DataQueue_calibre_epub->enqueue($book);
     Common::hash_to_xmlfile($book, "$work_dir/$control_file") if $work;
 
@@ -578,7 +603,6 @@ sub clean_files {
 }
 
 sub ri_html_to_epub {
-#     use Encode;
     my $html_file = $docs_prefix;
     my $html = Common::read_file("$html_file");
     my $images = ();
@@ -590,22 +614,28 @@ sub ri_html_to_epub {
 }
 
 sub threading_my_shit {
-    my ($function, $queue, $max_html_parse_threads, $str_prepand) = @_;
-    my @thread = (1..$max_html_parse_threads);
+    my ($function, $queue, $max_nr_threads, $str_prepand) = @_;
+    my @thread = (1..$max_nr_threads);
     my $running_threads = {};
+# my $crt_nr_threads = $max_nr_threads;
 
-    print "Starting $max_html_parse_threads threads for $str_prepand.\n";
+    print "Starting $max_nr_threads threads for $str_prepand.\n";
     while (1) {
 	my $DataElement = $queue->peek;
 	last if defined $DataElement && $DataElement eq 'undef';
-	if (defined $DataElement && (scalar keys %$running_threads) < $max_html_parse_threads){
+	if (defined $DataElement && (scalar keys %$running_threads) < $max_nr_threads){
+# my ($stat_threads, $stat_vsize, $stat_rss, $sys_mem, $sys_mem_free, $sys_cache) = get_mem_info;
+# print Dumper("proc threads ".$stat_threads, "proc vsize ".$stat_vsize, "proc rss ".$stat_rss, "sys mem ".$sys_mem, "sys mem free ".$sys_mem_free, "sys cache ".$sys_cache);
+# print Dumper("running threads ".total_size($running_threads));
+# print Dumper("function ".total_size($function));
+	    die "We can't have nothing in thread array.\n" if ! scalar @thread;
 	    $queue->dequeue;
 	    my $name = $DataElement->{'title'};
 	    my $crt_thread = shift @thread;
 	    Common::my_print_prepand("$crt_thread ($str_prepand). $name ");
 	    my $t = threads->create($function, $DataElement, $crt_thread);
 	    $running_threads->{$name} = $t;
-	    Common::my_print "New thread launched. Running threads: ".(scalar threads->list)." (pending: ".$queue->pending().") \n\t\t".(join ";\n\t\t",(sort keys %$running_threads))."\n";
+	    Common::my_print "New thread launched (total: ".(scalar threads->list).", pending: ".$queue->pending().") \n\t\t".(join ";\n\t\t",(sort keys %$running_threads))."\n";
 	} else {
 	    usleep(300000);
 	}
@@ -613,7 +643,7 @@ sub threading_my_shit {
 	    if ($running_threads->{$name} > 0 && $running_threads->{$name}->is_joinable()) {
 		my $crt_thread = $running_threads->{$name}->join();
 		delete $running_threads->{$name};
-		print "x ($str_prepand). Done with thread $crt_thread: $name\n";
+		print "$crt_thread ($str_prepand). Done with thread $name\n";
 		push @thread, $crt_thread;
 	    }
 	}
@@ -627,8 +657,8 @@ sub threading_my_shit {
 }
 
 sub transformer {
-    my $t = threads->new(\&threading_my_shit, \&libreoffice_html_clean, $DataQueue_html_clean, 2, "  clean");
-    my $w = threads->new(\&threading_my_shit, \&libreoffice_html_to_epub, $DataQueue_calibre_epub, 3, "   epub");
+    my $epub_thr = threads->create(\&threading_my_shit, \&libreoffice_html_to_epub, $DataQueue_calibre_epub, 5, "   epub");
+    my $clean_thr = threads->create(\&threading_my_shit, \&libreoffice_html_clean, $DataQueue_html_clean, 5, "  clean");
     my $files_to_import = synchronize_files;
     my $total = scalar (keys %$files_to_import);
     my $crt = 1;
@@ -638,27 +668,26 @@ sub transformer {
 	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) {
 	    Common::my_print_prepand("0 (loffice). $files_to_import->{$file}->{'title'} ");
 	    my ($html, $images) = libreoffice_to_html($files_to_import->{$file});
-# 	    import_html_to_wiki($html, $images, $files_to_import->{$file});
 	} elsif ($type =~ m/\.pdf$/i) {
 	} else {
 	    print Dumper($files_to_import->{$file})."\nUnknown file type: $type.\n";
 	}
 	$crt++;
     }
+    print "0 (loffice). FIN *******************.\n";
     $DataQueue_html_clean->enqueue('undef');
+    $clean_thr->join();
     $DataQueue_calibre_epub->enqueue('undef');
-    $t->join();
-    $w->join();
+    $epub_thr->join();
 }
 
 if ($workign_mode eq "-ri") {
     ri_html_to_epub();
 } elsif ($workign_mode eq "-clean") {
     clean_files();
-} elsif ($workign_mode eq "-html" || $workign_mode eq "-epub") {
+} elsif ($workign_mode eq "-epub") {
     transformer();
 }
-
 
 #######   epub to big html
 #~/programe/calibre/ebook-convert Odiseea\ marţiană\ -\ maeştrii\ anticipaţiei\ clasice.epub Odiseea\ marţiană\ -\ maeştrii\ anticipaţiei\ clasice.htmlz

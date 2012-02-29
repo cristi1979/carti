@@ -1,4 +1,10 @@
 
+use Carti::WikiWork;
+use HTML::WikiConverter;
+my $wiki_site = "http://192.168.0.163/wiki";
+my ($wiki_user, $wiki_pass, $wiki_original_files) = ("admin", "qwaszx", "$wiki_site/fisiere_originale");
+my $our_wiki;
+
 sub doc_tree_fix_paragraph_center {
     my $tree = shift;
     Common::my_print "\t".(++$counter)." Fix paragraph centers.\n";
