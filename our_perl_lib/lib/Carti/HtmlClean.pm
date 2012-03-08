@@ -9,15 +9,14 @@ require Exporter;
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(clean_html_from_oo);
 }
-# our @EXPORT_OK = qw(clean_html_from_oo);
 
 use HTML::Tidy;
 use URI::Escape;
 use CSS::Tiny;
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
+use HTML::TreeBuilder;
 use HTML::TreeBuilder::XPath;
-# use HTML::TreeBuilder;
 # use XML::LibXML;
 use Cwd 'abs_path';
 use File::Basename;
@@ -25,19 +24,11 @@ use Encode;
 use Carti::Common;
 my $counter = 0;
 
-sub new {
-    my $class = shift;
-    my $self = {};
-    bless($self, $class);
-    return $self;
-}
-
 sub get_tree {
     my $html = shift;
     Common::my_print "\t".(++$counter)." Building html tree.\n";
-    my $tree = HTML::TreeBuilder::XPath->new();
+    my $tree = HTML::TreeBuilder->new(api_version => 3);
     $tree = $tree->parse_content(decode_utf8($html));
-    $tree->eof();
     return $tree;
 }
 
@@ -242,7 +233,7 @@ sub doc_find_unknown_elements {
     Common::my_print "\t".(++$counter)." Find unknown elements.\n";
     foreach my $a_tag ($tree->descendants()) {
 	die "Unknown tag: ".$a_tag->tag."\n" if $a_tag->tag !~ m/^h[0-9]{1,2}$/ &&
-	      $a_tag->tag !~ m/^(head|meta|font|p|div|br|a|dd|dl|dt|table|td|tr|title|i|img|span|sup|body|style|b|u|ul|ol|li|center|sub|hr)$/;
+	      $a_tag->tag !~ m/^(head|meta|font|p|div|br|a|dd|dl|dt|table|td|tr|title|i|img|span|sup|body|style|b|u|ul|ol|li|center|hr)$/;
     }
     return $tree;
 }
@@ -454,6 +445,7 @@ sub doc_tree_clean_font {
     while ($worky) {
       $worky = 0;
       foreach my $a_tag ($tree->guts->look_down(_tag => "font")) {
+# $a_tag->replace_with_content ;next;
 	  foreach my $attr_name ($a_tag->all_external_attr_names()) {
 	      my $attr_value = $a_tag->attr($attr_name);
 	      next if ( $attr_name eq "color" );
@@ -687,9 +679,10 @@ sub clean_html_from_ms {
     return ($html, $images);
 }
 
+use Devel::Size qw(size total_size);
 my $colors = "no";
 sub clean_html_from_oo {
-    my ($self, $html) = @_;
+    my ($html, $title) = @_;
     my $no_links = 0;
     ## this should be minus, but it's actually control character RS
     $html =~ s/\x{1e}/-/gsi;
@@ -697,13 +690,13 @@ sub clean_html_from_oo {
     $html =~ s/&shy;//g;
     $html =~ s/&nbsp;/ /g;
     my ($txt1, $txt2, $images);
-
-    my $tree = get_tree($html);
-#     eval{
+    my $tree;
+    eval{
+    $tree = get_tree($html);
     my $enc = doc_tree_find_encoding($tree);
     $tree = doc_tree_remove_TOC($tree);
     $txt1 = $tree->as_trimmed_text;
-    ## start with fucking removing colors
+#     start with fucking removing colors
     $tree = doc_tree_clean_color($tree) if $colors !~ m/^yes$/i;
     $tree = doc_tree_clean_font($tree);
     $tree = doc_tree_remove_empty_font($tree);
@@ -728,16 +721,17 @@ sub clean_html_from_oo {
     $txt2 = $tree->as_trimmed_text;
     $tree = doc_tree_fix_paragraphs_start($tree);
     $tree = doc_find_unknown_elements($tree);
-#     };
-    $html = $tree->as_HTML('<>&', "\t");
+    };
+    my $msg = $@;
+    $html = $tree->as_HTML('<>&', "\t") || die "can't get html from tree\n";
     $tree = $tree->delete();
     undef ($tree);
-#     die "$@" if ($@);
-# Common::write_file("./html2.html", $html);
+#     first clean up and after that die
+    die Dumper($msg) if ($msg);
 # $txt1 =~ s/,/\n/g;    $txt2 =~ s/,/\n/g;
+# Common::write_file("./html2.html", $html);
 # Common::write_file("./txt1.html", $txt1);
 # Common::write_file("./txt2.html", $txt2);
-# exit 12;
     die "Text mismatch.\n" if $txt1 ne $txt2;
     return (html_tidy($html), $images);
 }
@@ -764,8 +758,8 @@ sub html_tidy {
 		    && $_->{'_text'} !~ m/^Document content looks like HTML Proprietary$/
 		    && $_->{'_text'} !~ m/^<a> cannot copy name attribute to id$/
 		    && $_->{'_text'} !~ m/^<img> anchor "[a-z0-9_ ]+" already defined$/i
+		    && $_->{'_text'} !~ m/^<img> cannot copy name attribute to id$/
 # 		    $_->{'_text'} !~ m/^missing <li>$/ &&
-# 		    $_->{'_text'} !~ m/^<img> cannot copy name attribute to id$/ &&
 # 		    $_->{'_text'} !~ m/^<a> anchor "_[a-b]i[0-9]+" already defined$/i &&
 # 		    ;
     }

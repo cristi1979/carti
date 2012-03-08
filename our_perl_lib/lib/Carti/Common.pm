@@ -1,8 +1,5 @@
 package Common;
 
-# use Exporter qw( import );
-# @EXPORT = qw(read_file copy_dir move_dir write_file);
-
 use warnings;
 use strict;
 
@@ -14,6 +11,7 @@ $Data::Dumper::Sortkeys = 1;
 use Unicode::Normalize 'NFD','NFC','NFKD','NFKC';
 use Archive::Zip qw( :ERROR_CODES );
 use XML::Simple;
+use Cwd 'abs_path';
 
 sub xmlfile_to_hash {
     my $file = shift;
@@ -23,6 +21,8 @@ sub xmlfile_to_hash {
 
 sub hash_to_xmlfile {
     my ($hash, $name, $root_name) = @_;
+    my ($file,$dir,$suffix) = fileparse("$name", qr/\.[^.]*/);
+    makedir($dir);
     $root_name = "out" if ! defined $root_name;
     $hash->{$_} = $hash->{$_} foreach (keys %$hash);
 
