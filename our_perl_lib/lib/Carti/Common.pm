@@ -12,6 +12,7 @@ use Unicode::Normalize 'NFD','NFC','NFKD','NFKC';
 use Archive::Zip qw( :ERROR_CODES );
 use XML::Simple;
 use Cwd 'abs_path';
+use Encode;
 
 sub xmlfile_to_hash {
     my $file = shift;
@@ -26,11 +27,12 @@ sub hash_to_xmlfile {
     my ($file,$dir,$suffix) = fileparse("$name", qr/\.[^.]*/);
     makedir($dir);
     $root_name = "out" if ! defined $root_name;
-#     $hash->{$_} = Encode::decode('utf8', $hash->{$_}) foreach (keys %$hash);
+    my %hash_copy = %$hash;
+    $hash_copy{$_} = decode_utf8($hash_copy{$_}) foreach (keys %hash_copy);
 
     my $xs = new XML::Simple();
     unlink $name;
-    my $xml = $xs->XMLout($hash,
+    my $xml = $xs->XMLout(\%hash_copy,
 		    NoAttr => 1,
 		    RootName=>$root_name,
 		    OutputFile => $name,

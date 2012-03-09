@@ -23,7 +23,7 @@ use File::Copy;
 use lib (fileparse(abs_path($0), qr/\.[^.]*/))[1]."our_perl_lib/lib";
 
 use File::Path qw(make_path remove_tree);
-use Encode;
+# use Encode;
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 use URI::Escape;
