@@ -682,7 +682,7 @@ sub clean_html_from_ms {
 use Devel::Size qw(size total_size);
 my $colors = "no";
 sub clean_html_from_oo {
-    my ($html, $title) = @_;
+    my ($html, $title, $work_dir) = @_;
     my $no_links = 0;
     ## this should be minus, but it's actually control character RS
     $html =~ s/\x{1e}/-/gsi;
@@ -725,14 +725,15 @@ sub clean_html_from_oo {
     my $msg = $@;
     $html = $tree->as_HTML('<>&', "\t") || die "can't get html from tree\n";
     $tree = $tree->delete();
-    undef ($tree);
 #     first clean up and after that die
     die Dumper($msg) if ($msg);
-# $txt1 =~ s/,/\n/g;    $txt2 =~ s/,/\n/g;
-# Common::write_file("./html2.html", $html);
-# Common::write_file("./txt1.html", $txt1);
-# Common::write_file("./txt2.html", $txt2);
-    die "Text mismatch.\n" if $txt1 ne $txt2;
+    if ($txt1 ne $txt2) {
+	$txt1 =~ s/,/\n/g;    $txt2 =~ s/,/\n/g;
+	Common::write_file("$work_dir/html2.html", $html);
+	Common::write_file("$work_dir/txt1.html", $txt1);
+	Common::write_file("$work_dir/txt2.html", $txt2);
+	die "Text mismatch.\n";
+    }
     return (html_tidy($html), $images);
 }
 

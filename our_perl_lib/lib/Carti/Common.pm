@@ -16,7 +16,9 @@ use Cwd 'abs_path';
 sub xmlfile_to_hash {
     my $file = shift;
     my $xml = new XML::Simple;
-    return $xml->XMLin("$file", SuppressEmpty => 1);
+    my $hash = $xml->XMLin("$file", SuppressEmpty => 1);
+    $hash->{$_} = Encode::encode('utf8', $hash->{$_}) foreach (keys %$hash);
+    return $hash;
 }
 
 sub hash_to_xmlfile {
@@ -24,7 +26,7 @@ sub hash_to_xmlfile {
     my ($file,$dir,$suffix) = fileparse("$name", qr/\.[^.]*/);
     makedir($dir);
     $root_name = "out" if ! defined $root_name;
-    $hash->{$_} = $hash->{$_} foreach (keys %$hash);
+    $hash->{$_} = Encode::decode('utf8', $hash->{$_}) foreach (keys %$hash);
 
     my $xs = new XML::Simple();
     unlink $name;

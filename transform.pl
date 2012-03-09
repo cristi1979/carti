@@ -29,13 +29,43 @@ $Data::Dumper::Sortkeys = 1;
 use URI::Escape;
 use Time::HiRes qw(usleep nanosleep);
 use File::stat;
-use IO::Select;
+# use IO::Select;
 use POSIX ":sys_wait_h";
 # $SIG{CHLD} = 'IGNORE';
 
 use Carti::HtmlClean;
 use Carti::Common;
 use Carti::WikiTxtClean;
+
+use IPC::Shareable (':all');
+my $glue = 'data';
+my %shared_data;
+my %options = (
+     create    => 1,
+     exclusive => 1,
+     mode      => 0660,
+     destroy   => 1,
+     size      => 1024*1024,
+ );
+my $knot = tie %shared_data, 'IPC::Shareable', $glue, { %options } or die "server: tie failed\n";
+$knot->remove;
+IPC::Shareable->clean_up_all;
+$knot = tie %shared_data, 'IPC::Shareable', $glue, { %options } or die "server: tie failed\n";
+$shared_data{'libreoffice'}{'queue'} = {};
+$shared_data{'libreoffice'}{'threads'} = 1;
+# $shared_data->{'libreoffice'}->{'running'} = 0;
+$shared_data{'libreoffice'}{'done'} = 0;
+$shared_data{'epub'}{'queue'} = {};
+$shared_data{'epub'}{'threads'} = 3;
+# $shared_data->{'epub'}->{'running'} = 0;
+$shared_data{'epub'}{'done'} = 0;
+$shared_data{'clean'}{'queue'} = {};
+$shared_data{'clean'}{'threads'} = 4;
+# $shared_data->{'clean'}->{'running'} = 0;
+$shared_data{'clean'}{'done'} = 0;
+$shared_data{'single_mode'} = undef;
+# $shared_data->{'running'} = 0;
+# $SIG{INT} = \&catch_int; sub catch_int {  die; }
 
 my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
 my $extra_tools_dir = "$script_dir/tools";
@@ -145,16 +175,16 @@ sub doc_to_html_macro {
     if (! -f "$libreoo_home/3/user/basic/Standard/" || -s "$libreoo_home/3/user/basic/Standard/" < 500) {
 	Common::my_print "Doing initial config for libreoffice.\n";
 	if (-d $libreoo_home){remove_tree("$libreoo_home") || die "Can't remove dir $libreoo_home: $!.\n"};
-	system("$libreoo_path", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "creating initial libreoffice failed ($?): $!.\n";
+	system("$libreoo_path", "--headless", "--invisible", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "creating initial libreoffice failed ($?): $!.\n";
 	copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", "$libreoo_home/3/user/basic/Standard/") or die "Copy failed libreoffice macros: $!\n";
     }
     eval {
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 600;
 # 	system("Xvfb $Xdisplay -screen 0 1024x768x16 &");
-# 	system("$libreoo_path", "--display", "$Xdisplay", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
+# 	system("$libreoo_path", "--display", "$Xdisplay", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
 	Common::my_print "Launching libreoffice.\n";
-	system("$libreoo_path", "--headless", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
+	system("$libreoo_path", "--headless", "--invisible", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
 	alarm 0;
     };
     $status = $?;
@@ -188,7 +218,7 @@ sub doc_to_html {
 	    local $SIG{ALRM} = sub { die "alarm\n" };
 	    alarm 600;
 	    system("Xvfb $Xdisplay -screen 0 1024x768x16 &> /dev/null &");
-	    system("$libreoo_path", "--display", "$Xdisplay", "--unnaccept=all", "--invisible", "--nocrashreport", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "html:HTML (StarWriter)", "--outdir", "$dir", "$doc_file") == 0 or die "libreoffice failed: $?";
+	    system("$libreoo_path", "--display", "$Xdisplay", "--unnaccept=all", "--invisible", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "html:HTML (StarWriter)", "--outdir", "$dir", "$doc_file") == 0 or die "libreoffice failed: $?";
 	    alarm 0;
 	};
 	$status = $?;
@@ -224,7 +254,9 @@ sub get_documents {
 	    $name = $tmp1;
 	    $suffix = $tmp2;
 	}
-	return if $suffix =~ m/\.jpe?g/i;
+	return if $suffix =~ m/^\.jpe?g$/i;
+	my $book->{"doc_file"} = $file;
+	$book->{"name"} = $name;
 	my $auth = $dir;
 	$auth =~ s/^$docs_prefix\/([^\/]+).*$/$1/;
 	die "Autor necunoscut: ".Dumper($file) if $auth =~ m/^\s*$/;
@@ -240,7 +272,6 @@ sub get_documents {
 	($series, $series_no, $name) = get_series($name);
 	my $key = "$auth$url_sep$name";
 	die "Book already exists: $key ($file)\n".Dumper($files_to_import->{$key}) if defined $files_to_import->{$key};
-	my $book->{"doc_file"} = "$file";
 	$book->{"filesize"} = -s "$file";
 	$book->{"filedate"} = stat($file)->mtime;
 	$book->{"type"} = "$suffix";
@@ -256,7 +287,7 @@ sub get_documents {
 	$book->{"seria_no"} = $series_no;
 
 	my $working_file = "$work_prefix/$key/$name";
-	$working_file =~ s/[:,]//g;
+	$working_file =~ s/[:,"]//g;
 	$working_file = Common::normalize_text("$working_file");
 	my ($name_x,$dir_x,$suffix_x) = fileparse($working_file, qr/\.[^.]*/);
 	$book->{"safe_name"} = "$name_x";
@@ -339,20 +370,20 @@ sub convert_images {
 sub libreoffice_to_html {
     my $xml_book = shift;
     my $book = Common::xmlfile_to_hash("$xml_book");
-    my ($file, $workingfile, $work_dir, $title, $html_file, $html_file_orig) =($book->{"doc_file"}, $book->{"workingfile"}, $book->{"workingdir"}, $book->{"title"}, $book->{"html_file"}, $book->{"html_file_orig"});
+    my ($workingfile, $work_dir, $title, $html_file, $html_file_orig) =($book->{"workingfile"}, $book->{"workingdir"}, $book->{"title"}, $book->{"html_file"}, $book->{"html_file_orig"});
 
     my $working_file = "$work_dir/$workingfile";
     Common::my_print_prepand("\t ");
     eval{
-    if (not defined $book->{"libreoffice"}) {
+    if (! defined $book->{"libreoffice"}) {
 	print "Doing the doc to html conversion for $title.\n";
 	Common::makedir($work_dir);
-	copy($file, $working_file) or die "Copy failed \n\t$file\n\t$working_file: $!\n";
+	copy($book->{"doc_file"}, $working_file) or die "Copy failed \n\t$book->{'doc_file'}\n\t$work_dir:\n$!\n";
 	my $res = doc_to_html_macro($working_file);
 	die "Can't generate html $html_file.\n" if ($res || ! -s $html_file);
 	move("$html_file", "$html_file_orig") || die "can't move file $html_file.\n";
 	my $zip_file = "$work_dir/$title.zip";
-	Common::add_file_to_zip("$zip_file", "$file");
+	Common::add_file_to_zip("$zip_file", $book->{"doc_file"});
 	unlink $working_file || die "Can't remove file $working_file: $!\n";
 	$book->{"libreoffice"} = "done";
 	Common::hash_to_xmlfile($book, "$xml_book");
@@ -363,13 +394,19 @@ sub libreoffice_to_html {
 sub libreoffice_html_clean {
     my $xml_book = shift;
     my $book = Common::xmlfile_to_hash("$xml_book");
-    my $file_max_size_single_thread = 10000000;
+    my $file_max_size_single_thread = 15000000;
     my ($work_dir, $title, $html_file_clean, $html_file_orig) =($book->{"workingdir"}, $book->{"title"}, $book->{"html_file_clean"}, $book->{"html_file_orig"});
-
+    if (-f $html_file_orig && -s $html_file_orig > $file_max_size_single_thread) {
+	## wait for others to finish:
+	print "\t\t************ Single for $title.************\n";
+	usleep(100000) while ($shared_data{'nr_processes'} > 1);
+    } else {
+	$shared_data{'single_mode'} = undef;
+    }
     eval {
     if (! defined $book->{"html_clean"} && -s $html_file_orig) {
 	print "Doing the html cleanup for $title.\n";
-	my ($html, $images) = HtmlClean::clean_html_from_oo(Common::read_file($html_file_orig), $title);
+	my ($html, $images) = HtmlClean::clean_html_from_oo(Common::read_file($html_file_orig), $title, $work_dir);
 	my $cover = convert_images ($images, $work_dir);
 	Common::write_file($html_file_clean, $html);
 	$book->{'scurte'} = 1 if (length($html) <= 35000);
@@ -388,9 +425,10 @@ sub libreoffice_html_to_epub {
     my $book = Common::xmlfile_to_hash("$xml_book");
     my ($work_dir, $title, $html_file_clean) = ($book->{"workingdir"}, $book->{"title"}, $book->{"html_file_clean"});
 
+    $shared_data{'single_mode'} = undef;
     eval {
-    if (not defined $book->{"epub"} && -s $html_file_clean) {
-	Common::my_print "Doing epubs for $title.\n";
+    if (! defined $book->{"epub"} && -s $html_file_clean) {
+	print "Doing epubs for $title.\n";
 	opendir(DIR, "$work_dir");
 	my @images = grep(/\.jpg$/,readdir(DIR));
 	closedir(DIR);
@@ -413,10 +451,6 @@ sub html_to_epub {
     push @tags, "ver=".$book->{'ver'} if defined $book->{'ver'};
 
     $title =~ s/\"/\\"/g;
-    my ($name_fix, $html_file_fix) = ($name, $html_file);
-    $name_fix =~ s/\"/\\"/g;
-    $html_file_fix =~ s/\"/\\"/g;
-
     my $epub_command = "$extra_tools_dir/calibre/ebook-convert";
     my $epub_parameters = "--disable-font-rescaling --minimum-line-height=0 --toc-threshold=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --authors=\"$authors\" --title=\"$title\"";
 # --keep-ligatures --rating=between 1 and 5
@@ -425,11 +459,11 @@ sub html_to_epub {
     $epub_parameters .= " --cover=\"$book->{'coperta'}\"" if defined $book->{'coperta'};
 
     my ($out_file, $out_file_fix, $in_file, $output);
-    $in_file = "$html_file_fix";
+    $in_file = "$html_file";
 
     ### normal epub
 #     $out_file = "$dir/normal/$name.epub";
-#     $out_file_fix = "$dir/normal/$name_fix.epub";
+#     $out_file_fix = "$dir/normal/$name.epub";
 #     if (! (defined $book->{'epub_normal'} && -s $out_file_fix)){
 #     Common::my_print "Converting to epub.\n";
 #     Common::makedir("$dir/normal/");
@@ -441,7 +475,7 @@ sub html_to_epub {
 #     $in_file = "$out_file_fix";
     ### epub with external font
     $out_file = "$dir/external/$name.epub";
-    $out_file_fix = "$dir/external/$name_fix.epub";
+    $out_file_fix = "$dir/external/$name.epub";
     if (! (defined $book->{'epub_external'} && -s $out_file_fix)){
     Common::my_print "Converting to epub with external font.\n";
     Common::makedir("$dir/external/");
@@ -452,7 +486,7 @@ sub html_to_epub {
 
     ### epub with embedded font
     $out_file = "$dir/internal/$name.epub";
-    $out_file_fix = "$dir/internal/$name_fix.epub";
+    $out_file_fix = "$dir/internal/$name.epub";
     if (! (defined $book->{'epub_embedded'} && -s $out_file_fix)){
     Common::my_print "Converting to epub with embedded font.\n";
     Common::makedir("$dir/internal/");
@@ -464,7 +498,7 @@ sub html_to_epub {
 
     ### normal mobi
     $out_file = "$dir/mobi/$name.mobi";
-    $out_file_fix = "$dir/mobi/$name_fix.mobi";
+    $out_file_fix = "$dir/mobi/$name.mobi";
     if (! (defined $book->{'epub_mobi'}  && -s $out_file_fix)){
     Common::my_print "Converting to mobi.\n";
     Common::makedir("$dir/mobi/");
@@ -550,93 +584,97 @@ sub ri_html_to_epub {
 }
 
 sub focker_launcher {
-    my ($function, $max_nr_threads, $str_prepand, $ref2fh) = @_;
-    print "starting forker process $str_prepand\n";
-    my @queue;
-    my $running;
-    my @thread = (1..$max_nr_threads);
-    my $s = IO::Select->new();
-    $s->add(\*STDIN);
-
+    my ($function, $crt_worker, $next_worker) = @_;
+    print "starting forker process $crt_worker\n";
+    my ($running, @queue);
+    my @thread = (1..$shared_data{$crt_worker}{'threads'});
     while (1) {
-	my $DataElement = <STDIN> if ($s->can_read(.1));
-	push @queue, $DataElement if defined $DataElement;
-	if ((scalar keys %$running) < $max_nr_threads && scalar @queue){
-	    die "Can't have this.\n".Dumper(@thread) if not scalar @thread;
-	    $DataElement = shift @queue;
-	    next if not defined $DataElement;
-	    my $crt = shift @thread;
-	    chomp $DataElement;
-	    last if $DataElement eq 'undef';
+	usleep(100000);
+	$knot->shlock;
+	foreach (keys $shared_data{$crt_worker}{'queue'}){
+	    push @queue, $_;
+	    delete $shared_data{$crt_worker}{'queue'}{$_};
+	}
+	last if $shared_data{$crt_worker}{'queue_done'} && ! scalar @queue;
+	
+	if ((scalar keys %$running) < $shared_data{$crt_worker}{'threads'} &&
+		    scalar @queue &&
+		    ! defined $shared_data{'single_mode'}){
+	    ## presume we need to run in single mode. Clear in forked process if not the case
+	    my $DataElement = shift @queue;
+	    $shared_data{'single_mode'} = $DataElement;
+	    $knot->shunlock;
 	    my $name = (split /$url_sep/, ((split /\/+/, $DataElement)[-2]))[-1];
-	    my $crt_thread = scalar @queue;
+	    my $crt = shift @thread;
 	    my $pid = fork();
-	    if(defined ($pid) and $pid==0) {
-		Common::my_print_prepand("$crt $str_prepand $name ");
-		$function->("$DataElement", $crt);
-		print $ref2fh "$DataElement\n" if defined $ref2fh;
-# print Dumper($DataElement,$ref2fh);
+	    die "Can't fork.\n" if ! defined ($pid);
+	    if($pid==0) {
+		Common::my_print_prepand("$crt $crt_worker $name ");
+# print "$crt_worker working for $DataElement\n";
+		$function->($DataElement);
 		exit (0);
 	    }
+	    print "$crt_worker started $name\n" if $pid > 0;
 	    $running->{$pid}->{'thread_nr'} = $crt;
 	    $running->{$pid}->{'xml_file'} = $DataElement;
 	    $running->{$pid}->{'name'} = $name;
+	} else {
+	    $knot->shunlock;
 	}
-	my $pid = -2;
-	while ($pid && $pid != -1) {
-# print "xxx $str_prepand $pid ".(scalar @queue).Dumper($DataElement);
+	my $pid;
+	do {
 	    $pid = waitpid(-1, WNOHANG);
 	    if ($pid > 0) {
-		print "$str_prepand reapead $running->{$pid}->{'name'}\n" if $pid > 0;
+		die "Unknown pid: $pid.\n".Dumper($running) if ! defined $running->{$pid};
+		my $DataElement = $running->{$pid}->{'xml_file'};
 		push @thread, $running->{$pid}->{'thread_nr'};
-# 		print $ref2fh $running->{$pid}->{'xml_file'}."\n" if defined $ref2fh;
+		$knot->shlock;
+		$shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker;
+# 		delete $shared_data{'running'}{$crt_worker}{$DataElement};
+		$shared_data{'single_mode'} = undef if defined $shared_data{'single_mode'} && $shared_data{'single_mode'} eq $DataElement;
+		$knot->shunlock;
+		print "$crt_worker reapead $running->{$pid}->{'name'}\n";
 		delete $running->{$pid};
 	    }
-	};
-	usleep(100000);
+	} while ($pid>0);
     }
-    my $pid = -2;
-    while (scalar keys %$running) {
+
+    my $pid;
+    do {
 	$pid = waitpid(-1, WNOHANG);
 	if ($pid > 0) {
-		print "$str_prepand reapead $running->{$pid}->{'name'}\n" if $pid > 0;
-		push @thread, $running->{$pid}->{'thread_nr'};
-# 		print $ref2fh $running->{$pid}->{'xml_file'}."\n" if defined $ref2fh;
-		delete $running->{$pid};
+	    die "Unknown pid: $pid.\n".Dumper($running) if ! defined $running->{$pid};
+	    my $DataElement = $running->{$pid}->{'xml_file'};
+	    print "$crt_worker reapead $running->{$pid}->{'name'}\n";
+	    push @thread, $running->{$pid}->{'thread_nr'};
+	    $knot->shlock;
+	    $shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker;
+# 	    delete $shared_data{'running'}{$crt_worker}{$DataElement};
+	    $shared_data{'single_mode'} = undef if defined $shared_data{'single_mode'} && $shared_data{'single_mode'} eq $DataElement;
+	    $knot->shunlock;
+	    delete $running->{$pid};
 	}
-    };
-    print $ref2fh "undef\n" if defined $ref2fh;
-}
+    } while ($pid>0);
 
-sub epub_process_launcher {
-# select STDOUT; $| = 1;
-    print "starting epuber process\n";
-    my $str_prepand = "  epub";
-    focker_launcher(\&libreoffice_html_to_epub, 6, $str_prepand);
-    print "(epuber). FIN *******************.\n";
-}
-
-sub cleaner_process_launcher {
-    print "starting cleaner process\n";
-    my $str_prepand = "   clean";
-    my $pid_epub = open(EPUB, "|-");
-    autoflush EPUB  1;
-    die "cannot fork epuber\n" if ! defined $pid_epub;
-    if (!$pid_epub){epub_process_launcher();exit 0;};
-    focker_launcher(\&libreoffice_html_clean, 6, $str_prepand, \*EPUB);
-    print "(cleaner). FIN *******************.\n";
-    usleep(100000) while (! eof EPUB);
-    close(EPUB);
-    print "closed epub queue\n";
+    $knot->shlock;
+    $shared_data{$next_worker}{'queue_done'} = 1 if defined $next_worker;
+    $knot->shunlock;
+    print "($crt_worker). FIN *******************.\n";
 }
 
 sub main_process_worker {
     print "starting main thread\n";
-    my $pid_clean = open(CLEANER, "|-");
-    autoflush CLEANER  1;
-    die "cannot fork cleaner\n" if ! defined $pid_clean;
-    if (!$pid_clean){cleaner_process_launcher();exit 0;};
-
+    my $forks;
+    my $pid;
+    $pid = fork();
+    if (!$pid) {focker_launcher(\&libreoffice_to_html, "libreoffice", "clean"); exit 0;};
+    $forks->{$pid} = 1;
+    $pid = fork();
+    if (!$pid) {focker_launcher(\&libreoffice_html_clean, "clean", "epub"); exit 0;};
+    $forks->{$pid} = 1;
+    $pid = fork();
+    if (!$pid) {focker_launcher(\&libreoffice_html_to_epub, "epub", undef); exit 0;};
+    $forks->{$pid} = 1;
     my $files_to_import = synchronize_files;
     my $crt = 1;
     foreach my $file (sort keys %$files_to_import) {
@@ -644,8 +682,9 @@ sub main_process_worker {
 	my $xml_file = "$files_to_import->{$file}->{'workingdir'}/$control_file";
 	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) {
 	    Common::hash_to_xmlfile($files_to_import->{$file}, $xml_file);
-	    libreoffice_to_html($xml_file);
-	    print CLEANER "$xml_file\n";
+	    $knot->shlock;
+	    $shared_data{'libreoffice'}{'queue'}{$xml_file} = 1;
+	    $knot->shunlock;
 	} elsif ($type =~ m/\.pdf$/i) {
 	} else {
 	    print Dumper($files_to_import->{$file})."\nUnknown file type: $type.\n";
@@ -653,11 +692,19 @@ sub main_process_worker {
 	$crt++;
 # last if $crt>10;
     }
-    print "0 (loffice). FIN *******************.\n";
-    print CLEANER "undef\n";
-    usleep(100000) while (! eof CLEANER);
-    close(CLEANER);
-    print "closed clean queue\n";
+    $knot->shlock;
+    $shared_data{'libreoffice'}{'queue_done'} = 1;
+    $knot->shunlock;
+    while (scalar keys %$forks) {
+	$pid = waitpid(-1, WNOHANG);
+	if ($pid > 0) {
+	    next, print "strange pid: $pid\n" if ! defined  $forks->{$pid};
+	    delete $forks->{$pid};
+	    print "reaped $pid\n";
+	}
+	usleep(100000);
+    }
+    print "FIN *******************.\n";
 }
 
 if ($workign_mode eq "-ri") {
@@ -667,14 +714,14 @@ if ($workign_mode eq "-ri") {
 } elsif ($workign_mode eq "-epub") {
     main_process_worker();
 }
-
+IPC::Shareable->clean_up_all;
 #######   epub to big html
 #~/programe/calibre/ebook-convert Odiseea\ marţiană\ -\ maeştrii\ anticipaţiei\ clasice.epub Odiseea\ marţiană\ -\ maeştrii\ anticipaţiei\ clasice.htmlz
 #######   run macro on doc
 # rm -rf ~/.libreoffice/
 # libreoffice -headless -invisible -nodefault -nologo -nofirststartwizard -norestore -convert-to swriter /dev/null
 # cp /home/cristi/programe/scripts/carti/tools/libreoffice/Standard/* ~/.libreoffice/3/user/basic/Standard/
-# libreoffice --headless --invisible --nocrashreport --nodefault --nologo --nofirststartwizard --norestore "macro:///Standard.Module1.embedImagesInWriter(/home/cristi/programe/scripts/carti/qq/index.html)"
+# libreoffice --headless --invisible --nodefault --nologo --nofirststartwizard --norestore "macro:///Standard.Module1.embedImagesInWriter(/home/cristi/programe/scripts/carti/qq/index.html)"
 # http://user.services.openoffice.org/en/forum/viewtopic.php?f=20&t=23909
 #######   html to doc
 # libreoffice -infilter="HTML (StarWriter)" -convert-to "ODF Text Document" ./q/Poul\ Anderson/index.html
