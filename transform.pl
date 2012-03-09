@@ -37,6 +37,29 @@ use Carti::HtmlClean;
 use Carti::Common;
 use Carti::WikiTxtClean;
 
+my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
+`$script_dir/clear_shm.sh`;
+my $extra_tools_dir = "$script_dir/tools";
+
+my $workign_mode = shift;
+my $docs_prefix = shift;
+$docs_prefix = abs_path($docs_prefix);
+my $good_files_dir = "$docs_prefix/aaa_aaa/";
+my $bad_files_dir = "$docs_prefix/ab_aaa - RAU/";
+my $new_files_dir = "$docs_prefix/ac_noi/";
+our $duplicate_files = {};
+my $duplicate_file = "$script_dir/duplicate_files";
+
+my $control_file = "doc_info_file.xml";
+my $work_prefix = "/media/carti/work";
+# my $work_prefix = "./work";
+$work_prefix = abs_path($work_prefix);
+
+my $debug = 1;
+my $url_sep = " -- ";
+my $font = "BookmanOS.ttf";
+my $Xdisplay = ":12345";
+
 use IPC::Shareable (':all');
 my $glue = 'data';
 my %shared_data;
@@ -67,30 +90,7 @@ $shared_data{'single_mode'} = undef;
 # $shared_data->{'running'} = 0;
 # $SIG{INT} = \&catch_int; sub catch_int {  die; }
 
-my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
-my $extra_tools_dir = "$script_dir/tools";
-
-my $workign_mode = shift;
-my $docs_prefix = shift;
-$docs_prefix = abs_path($docs_prefix);
-my $good_files_dir = "$docs_prefix/aaa_aaa/";
-my $bad_files_dir = "$docs_prefix/ab_aaa - RAU/";
-my $new_files_dir = "$docs_prefix/ac_noi/";
-our $duplicate_files = {};
-my $duplicate_file = "$script_dir/duplicate_files";
-
-my $control_file = "doc_info_file.xml";
-my $work_prefix = "/media/carti/work";
-# my $work_prefix = "./work";
-$work_prefix = abs_path($work_prefix);
-
-my $debug = 1;
-my $url_sep = " -- ";
-my $font = "BookmanOS.ttf";
-my $Xdisplay = ":12345";
-# my $stdout = \*STDOUT;
-
-use Devel::Size qw(size total_size);
+# use Devel::Size qw(size total_size);
 # sub get_mem_info {
 #     my @proc_mem = split /\s+/, Common::read_file("/proc/$$/stat");
 #     my ($stat_threads, $stat_vsize, $stat_rss) = ($proc_mem[19], $proc_mem[22]/1024, $proc_mem[23]/1024);
@@ -394,11 +394,12 @@ sub libreoffice_to_html {
 sub libreoffice_html_clean {
     my $xml_book = shift;
     my $book = Common::xmlfile_to_hash("$xml_book");
-    my $file_max_size_single_thread = 15000000;
+    my $file_max_size_single_thread = 10000000;
     my ($work_dir, $title, $html_file_clean, $html_file_orig) =($book->{"workingdir"}, $book->{"title"}, $book->{"html_file_clean"}, $book->{"html_file_orig"});
     if (-f $html_file_orig && -s $html_file_orig > $file_max_size_single_thread) {
 	## wait for others to finish:
 	print "\t\t************ Single for $title.************\n";
+print Dumper(%shared_data);
 	usleep(100000) while ($shared_data{'nr_processes'} > 1);
     } else {
 	$shared_data{'single_mode'} = undef;
@@ -610,7 +611,8 @@ sub focker_launcher {
 	    die "Can't fork.\n" if ! defined ($pid);
 	    if($pid==0) {
 		Common::my_print_prepand("$crt $crt_worker $name ");
-# print "$crt_worker working for $DataElement\n";
+		$shared_data{'nr_processes'}++;
+$shared_data{$crt_worker}{$DataElement} = 1;
 		$function->($DataElement);
 		exit (0);
 	    }
@@ -629,8 +631,9 @@ sub focker_launcher {
 		my $DataElement = $running->{$pid}->{'xml_file'};
 		push @thread, $running->{$pid}->{'thread_nr'};
 		$knot->shlock;
+delete $shared_data{$crt_worker}{$DataElement};
 		$shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker;
-# 		delete $shared_data{'running'}{$crt_worker}{$DataElement};
+		$shared_data{'nr_processes'}--;
 		$shared_data{'single_mode'} = undef if defined $shared_data{'single_mode'} && $shared_data{'single_mode'} eq $DataElement;
 		$knot->shunlock;
 		print "$crt_worker reapead $running->{$pid}->{'name'}\n";
@@ -649,7 +652,7 @@ sub focker_launcher {
 	    push @thread, $running->{$pid}->{'thread_nr'};
 	    $knot->shlock;
 	    $shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker;
-# 	    delete $shared_data{'running'}{$crt_worker}{$DataElement};
+	    $shared_data{'nr_processes'}--;
 	    $shared_data{'single_mode'} = undef if defined $shared_data{'single_mode'} && $shared_data{'single_mode'} eq $DataElement;
 	    $knot->shunlock;
 	    delete $running->{$pid};
