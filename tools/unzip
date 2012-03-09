@@ -1,0 +1,36 @@
+#!/bin/bash
+BAD_PRE="/home/cristi/BAD/"
+
+function unarch {
+  DIR=$(dirname "$1")
+  DIR=$(readlink -f "$DIR")
+  FILE=$(basename "$1")
+  NEW_DIR=$(mktemp --suffix=" -- $FILE -- " --tmpdir="$DIR" -u)
+  mkdir "$NEW_DIR" &&
+  mv "$DIR/$FILE" "$NEW_DIR" &&
+  echo "CMD: cd \"$NEW_DIR\" && $UNARCH ./\"$FILE\"" &&
+  cd "$NEW_DIR" ; $UNARCH ./"$FILE" && rm ./"$FILE"
+  if [[ $? -ne 0 ]]; then echo "$NEW_DIR/$FILE"; BAD="$BAD_PRE/$NEW_DIR";mkdir -p "$BAD"; mv "$NEW_DIR/$FILE" "$BAD";fi
+  cd "$CRT_DIR"
+}
+
+function search {
+  while IFS= read -r -d $'\0' file; do
+    unarch "$file"
+  done < <(find "$@" -type f -iname \*.$TYPE -print0)
+}
+
+CRT_DIR=$(pwd)
+CRT_DIR=$(readlink -f "$CRT_DIR")
+convmv -f cp1250 -t utf8 --nfc -r --notest "$@"
+TYPE="zip"
+UNARCH="unzip -o "
+search "$@"
+TYPE="rar"
+UNARCH="unrar x -o+ "
+search "$@"
+TYPE="ace"
+UNARCH="unace x "
+#UNARCH="unace x "
+search "$@"
+find "$@" -depth -type d -empty -exec rmdir {} \;
