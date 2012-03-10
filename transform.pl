@@ -23,7 +23,7 @@ use File::Copy;
 use lib (fileparse(abs_path($0), qr/\.[^.]*/))[1]."our_perl_lib/lib";
 
 use File::Path qw(make_path remove_tree);
-# use Encode;
+use Encode;
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 use URI::Escape;
@@ -592,12 +592,13 @@ sub focker_launcher {
     while (1) {
 	usleep(100000);
 	$knot->shlock;
-	foreach (keys $shared_data{$crt_worker}{'queue'}){
+	my %hash_queue = $shared_data{$crt_worker}{'queue'};
+	foreach (keys %hash_queue){
 	    push @queue, $_;
 	    delete $shared_data{$crt_worker}{'queue'}{$_};
 	}
 	last if $shared_data{$crt_worker}{'queue_done'} && ! scalar @queue;
-	
+
 	if ((scalar keys %$running) < $shared_data{$crt_worker}{'threads'} &&
 		    scalar @queue &&
 		    ! defined $shared_data{'single_mode'}){
