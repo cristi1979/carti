@@ -592,7 +592,7 @@ sub focker_launcher {
     while (1) {
 	usleep(100000);
 	$knot->shlock;
-	my %hash_queue = $shared_data{$crt_worker}{'queue'};
+	my %hash_queue = %{$shared_data{$crt_worker}{'queue'}};
 	foreach (keys %hash_queue){
 	    push @queue, $_;
 	    delete $shared_data{$crt_worker}{'queue'}{$_};
