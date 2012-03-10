@@ -18,7 +18,7 @@ sub xmlfile_to_hash {
     my $file = shift;
     my $xml = new XML::Simple;
     my $hash = $xml->XMLin("$file", SuppressEmpty => 1);
-#     $hash->{$_} = Encode::encode('utf8', $hash->{$_}) foreach (keys %$hash);
+    $hash->{$_} = Encode::encode('utf8', $hash->{$_}) foreach (keys %$hash);
     return $hash;
 }
 
