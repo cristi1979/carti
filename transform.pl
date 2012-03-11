@@ -51,8 +51,8 @@ our $duplicate_files = {};
 my $duplicate_file = "$script_dir/duplicate_files";
 
 my $control_file = "doc_info_file.xml";
-my $work_prefix = "/media/carti/work";
-# my $work_prefix = "./work";
+# my $work_prefix = "/media/carti/work";
+my $work_prefix = "./work";
 $work_prefix = abs_path($work_prefix);
 
 my $debug = 1;
@@ -270,8 +270,6 @@ sub get_documents {
 	$coperta = "$dir/$name.jpg" if -f "$dir/$name.jpg";
 	($ver, $name) = get_version($name);
 	($series, $series_no, $name) = get_series($name);
-	my $key = "$auth$url_sep$name";
-	die "Book already exists: $key ($file)\n".Dumper($files_to_import->{$key}) if defined $files_to_import->{$key};
 	$book->{"filesize"} = -s "$file";
 	$book->{"filedate"} = stat($file)->mtime;
 	$book->{"type"} = "$suffix";
@@ -286,17 +284,19 @@ sub get_documents {
 	$book->{"seria"} = $series;
 	$book->{"seria_no"} = $series_no;
 
-	my $working_file = "$work_prefix/$key/$name";
+	my $working_file = "$auth$url_sep$name/$name";
 	$working_file =~ s/[:,"]//g;
 	$working_file = Common::normalize_text("$working_file");
 	my ($name_x,$dir_x,$suffix_x) = fileparse($working_file, qr/\.[^.]*/);
 	$book->{"safe_name"} = "$name_x";
-	$book->{"workingdir"} = "$dir_x";
+	$book->{"workingdir"} = "$work_prefix/$dir_x";
 	$book->{"workingfile"} = "$name_x$suffix";
-	$book->{"html_file"} = "$dir_x$name_x.html";
-	$book->{"html_file_orig"} = "$dir_x$name_x\_orig.html";
-	$book->{"html_file_clean"} = "$dir_x$name_x\_clean.html";
+	$book->{"html_file"} = "$work_prefix/$dir_x$name_x.html";
+	$book->{"html_file_orig"} = "$work_prefix/$dir_x$name_x\_orig.html";
+	$book->{"html_file_clean"} = "$work_prefix/$dir_x$name_x\_clean.html";
 
+	my $key = "$dir_x";
+	die "Book already exists: $key ($file)\n".Dumper($files_to_import->{$key}) if defined $files_to_import->{$key};
 	$files_to_import->{$key} = $book;
 	if (defined $files_already_imported->{$key}) {
 	    my $crt_file = $files_already_imported->{$key};
@@ -311,34 +311,27 @@ sub get_documents {
 }
 
 sub get_existing_documents {
-#     my $documents_to_import = shift;
     our $files_already_imported = {};
-    my $work_dir = "$work_prefix/";
-    die "Working dir $work_dir is a file.\n" if -f $work_dir;
-    return if ! -d $work_dir;
-    print "Get already done files from $work_dir.\n";
-#     Common::makedir($work_dir);
-    $work_dir = abs_path("$work_prefix/");
-    opendir(DIR, "$work_dir") || die("Cannot open directory $work_dir.\n");
-    my @alldirs = grep { (!/^\.\.?$/) && -d "$work_dir/$_" } readdir(DIR);
+    die "Working dir $work_prefix is a file.\n" if -f $work_prefix;
+    return if ! -d $work_prefix;
+    print "Get already done files from $work_prefix.\n";
+    opendir(DIR, "$work_prefix") || die("Cannot open directory $work_prefix.\n");
+    my @alldirs = grep { (!/^\.\.?$/) && -d "$work_prefix/$_" } readdir(DIR);
     closedir(DIR);
     foreach my $dir (sort @alldirs) {
-# 	print "Found document $dir.\n";
-	my $title = $dir;
-	$dir = "$work_dir/$dir";
-	if (! -f "$dir/$control_file"){
-	    print "Remove wrong dir $dir.\n";
-	    remove_tree("$dir") || die "Can't remove dir $dir: $!.\n";
+	if (! -f "$work_prefix/$dir/$control_file"){
+	    print "Remove wrong dir $work_prefix/$dir.\n";
+	    remove_tree("$work_prefix/$dir") || die "Can't remove dir $work_prefix/$dir: $!.\n";
 	    next;
 	}
-	$files_already_imported->{$title} = Common::xmlfile_to_hash("$dir/$control_file");
+	$files_already_imported->{$dir} = Common::xmlfile_to_hash("$work_prefix/$dir/$control_file");
     }
-    return ($files_already_imported);
+    return $files_already_imported;
 }
 
 sub synchronize_files {
-    my $files_already_imported = get_existing_documents;
-    my $files_to_import = get_documents($files_already_imported);
+#     my $files_already_imported = get_existing_documents;
+    my $files_to_import = get_documents(get_existing_documents());
     print "\tDone.\n";
 #     my @arr1 = (keys %$files_already_imported);
 #     my @arr2 = (keys %$files_to_import);
