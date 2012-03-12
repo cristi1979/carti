@@ -76,18 +76,18 @@ IPC::Shareable->clean_up_all;
 $knot = tie %shared_data, 'IPC::Shareable', $glue, { %options } or die "server: tie failed\n";
 $shared_data{'libreoffice'}{'queue'} = {};
 $shared_data{'libreoffice'}{'threads'} = 1;
-# $shared_data->{'libreoffice'}->{'running'} = 0;
-$shared_data{'libreoffice'}{'done'} = 0;
+$shared_data{'libreoffice'}{'queue_done'} = 0;
+
 $shared_data{'epub'}{'queue'} = {};
 $shared_data{'epub'}{'threads'} = 3;
-# $shared_data->{'epub'}->{'running'} = 0;
-$shared_data{'epub'}{'done'} = 0;
+$shared_data{'epub'}{'queue_done'} = 0;
+
 $shared_data{'clean'}{'queue'} = {};
 $shared_data{'clean'}{'threads'} = 4;
-# $shared_data->{'clean'}->{'running'} = 0;
-$shared_data{'clean'}{'done'} = 0;
+$shared_data{'clean'}{'queue_done'} = 0;
+
 $shared_data{'single_mode'} = undef;
-# $shared_data->{'running'} = 0;
+$shared_data{'nr_processes'} = 0;
 # $SIG{INT} = \&catch_int; sub catch_int {  die; }
 
 # use Devel::Size qw(size total_size);
@@ -404,17 +404,18 @@ sub libreoffice_html_clean {
     my $xml_book = shift;
     my $book = Common::xmlfile_to_hash($xml_book);
     my ($work_dir, $title, $html_file_orig) =($book->{"workingdir"}, $book->{"title"}, $book->{"out"}->{"html_file_orig"});
-    my $file_max_size_single_thread = 10000000;
+    my $file_max_size_single_thread = 1000000000;
+    $shared_data{'single_mode'} = "clean_$title";
     if (-f $html_file_orig && -s $html_file_orig > $file_max_size_single_thread) {
 	## wait for others to finish:
 	print "\t\t************ Single for $title.************\n";
-print Dumper(%shared_data);
-	$shared_data{'single_mode'} = undef;
-die "testes\n";
+	print Dumper(%shared_data);
+# exit 1;
 	usleep(100000) while ($shared_data{'nr_processes'} > 1);
     } else {
 	$shared_data{'single_mode'} = undef;
     }
+#     $knot->shunlock;
     eval {
     if (! $book->{"result"}->{"html_clean"}) {
 	print "Doing the html cleanup for $title.\n";
@@ -437,7 +438,6 @@ sub libreoffice_html_to_epub {
     my $book = Common::xmlfile_to_hash($xml_book);
     my ($work_dir, $title, $html_file_clean) = ($book->{"workingdir"}, $book->{"title"}, $book->{"out"}->{"html_file_clean"});
 
-    $shared_data{'single_mode'} = undef;
     eval {
     if (! $book->{"result"}->{"ebook"}) {
 	print "Doing epubs for $title.\n";
@@ -457,12 +457,13 @@ sub make_ebook {
     my ($book, $type, $epub_command, $epub_parameters) = @_;
     my $in_file = $book->{"out"}->{"html_file_clean"};
     my $out_file = $book->{"out"}->{$type};
-    my $cmd = "$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover";
+    my $cmd = "$epub_command \"$in_file\" \"$out_file\" $epub_parameters";
     if (! defined $book->{"result"}->{$type} ne "done" || $book->{"result"}->{$type} ne "done"){
-      Common::my_print "Converting to epub.\n";
+      Common::my_print "Converting start to $type.\n";
       my $output = `$cmd`;
       die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$cmd\n\n" if ! -s $out_file;
       $book->{"result"}->{$type} = "done";
+      Common::my_print "Converting done to $type.\n";
     }
 }
 
@@ -619,32 +620,32 @@ sub ri_html_to_epub {
 
 sub focker_launcher {
     my ($function, $crt_worker, $next_worker) = @_;
-    print "starting forker process $crt_worker\n";
+    print "starting forker process $crt_worker.\n";
     my ($running, @queue);
-    my @thread = (1..$shared_data{$crt_worker}{'threads'});
+    my @thread = (1..20);
     while (1) {
 	usleep(100000);
 	$knot->shlock;
-# 	my %hash_queue = %{$shared_data{$crt_worker}{'queue'}};
 	foreach (keys %{$shared_data{$crt_worker}{'queue'}}){
 	    push @queue, $_;
 	    delete $shared_data{$crt_worker}{'queue'}{$_};
 	}
+	$knot->shunlock;
 	last if $shared_data{$crt_worker}{'queue_done'} && ! scalar @queue;
 
 	if ((scalar keys %$running) < $shared_data{$crt_worker}{'threads'} &&
 		    scalar @queue &&
+		    $knot->shlock(LOCK_SH|LOCK_NB) &&
 		    ! defined $shared_data{'single_mode'}){
 	    ## presume we need to run in single mode. Clear in forked process if not the case
 	    my $DataElement = shift @queue;
-	    $shared_data{'single_mode'} = $DataElement;
 	    $knot->shunlock;
 	    my $name = (split /$url_sep/, ((split /\/+/, $DataElement)[-2]))[-1];
 	    my $crt = shift @thread;
 	    my $pid = fork();
 	    die "Can't fork.\n" if ! defined ($pid);
 	    if($pid==0) {
-		Common::my_print_prepand("$crt $crt_worker $name ");
+		Common::my_print_prepand("$crt ($shared_data{$crt_worker}{'threads'}) $crt_worker $name ");
 		$knot->shlock;
 		$shared_data{$crt_worker}{$DataElement} = 0;
 		$shared_data{'nr_processes'}++;
@@ -702,8 +703,26 @@ sub focker_launcher {
 
     $knot->shlock;
     $shared_data{$next_worker}{'queue_done'} = 1 if defined $next_worker;
+    $shared_data{'brucealmighty'} = 1 if ! defined $next_worker;
+    $shared_data{$next_worker}{'threads'} += $shared_data{$crt_worker}{'threads'};
     $knot->shunlock;
     print "($crt_worker). FIN *******************.\n";
+}
+
+sub check_for_locks {
+    print "Starting locks check process.\n";
+    my $tries = 1;
+    while (! $shared_data{'brucealmighty'}) {
+	usleep(1000000);
+	if ( $knot->shlock(LOCK_SH|LOCK_NB) ){
+	    $knot->shunlock;
+	    $tries = 1;
+	} else {
+	    print "********* LOCKS ($tries):\n".Dumper(%shared_data)."*******************\n" if $tries % 60 == 0;
+	    $tries++;
+	}
+    }
+    print "(locks). FIN *******************.\n";
 }
 
 sub main_process_worker {
@@ -711,14 +730,18 @@ sub main_process_worker {
     my $forks;
     my $pid;
     $pid = fork();
+    if (!$pid) {check_for_locks; exit 0;};
+    $forks->{$pid} = "locks";
+    $pid = fork();
     if (!$pid) {focker_launcher(\&libreoffice_to_html, "libreoffice", "clean"); exit 0;};
-    $forks->{$pid} = 1;
+    $forks->{$pid} = "html";
     $pid = fork();
     if (!$pid) {focker_launcher(\&libreoffice_html_clean, "clean", "epub"); exit 0;};
-    $forks->{$pid} = 1;
+    $forks->{$pid} = "clean";
     $pid = fork();
     if (!$pid) {focker_launcher(\&libreoffice_html_to_epub, "epub", undef); exit 0;};
-    $forks->{$pid} = 1;
+    $forks->{$pid} = "epub";
+print Dumper($forks);
     my $files_to_import = synchronize_files;
     my $crt = 1;
     foreach my $file (sort keys %$files_to_import) {
@@ -735,7 +758,7 @@ sub main_process_worker {
 	    print Dumper($files_to_import->{$file})."\nUnknown file type: $type.\n";
 	}
 	$crt++;
-# last if $crt>10;
+last if $crt>10;
     }
     $knot->shlock;
     $shared_data{'libreoffice'}{'queue_done'} = 1;
