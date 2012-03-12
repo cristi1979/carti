@@ -270,6 +270,7 @@ sub get_documents {
 	$coperta = "$dir/$name.jpg" if -f "$dir/$name.jpg";
 	($ver, $name) = get_version($name);
 	($series, $series_no, $name) = get_series($name);
+	$book->{"xml_version"} = 1;
 	$book->{"filesize"} = -s "$file";
 	$book->{"filedate"} = stat($file)->mtime;
 	$book->{"type"} = "$suffix";
@@ -375,7 +376,7 @@ sub convert_images {
 sub libreoffice_to_html {
     my $xml_book = shift;
     my $book = Common::xmlfile_to_hash($xml_book);
-print Dumper($book);exit 1;
+# print Dumper($book);exit 1;
     my ($work_dir, $title, $html_file) =($book->{"workingdir"}, $book->{"title"}, $book->{"out"}->{"html_file"});
 
     my $working_file = "$work_dir/$book->{'doc_filename_fixed'}";
@@ -430,7 +431,7 @@ print Dumper(%shared_data);
 sub libreoffice_html_to_epub {
     my $xml_book = shift;
     my $book = Common::xmlfile_to_hash($xml_book);
-    my ($work_dir, $title, $html_file_clean) = ($book->{"workingdir"}, $book->{"title"}, $book->{"html_file_clean"});
+    my ($work_dir, $title, $html_file_clean) = ($book->{"workingdir"}, $book->{"title"}, $book->{"out"}->{"html_file_clean"});
 
     $shared_data{'single_mode'} = undef;
     eval {
@@ -463,14 +464,18 @@ sub html_to_epub {
 # --keep-ligatures --rating=between 1 and 5
     $epub_parameters .= " --tags=\"".(join ',', @tags)."\"" if scalar @tags;
     $epub_parameters .= " --series=\"".$book->{'seria'}."\" --series-index=\".$book->{'seria_no'}"."\"" if defined $book->{'seria'} && defined $book->{'seria_no'};
-    $epub_parameters .= " --cover=\"$book->{'coperta'}\"" if defined $book->{'coperta'};
+    if (defined $book->{'coperta'}) {
+	my $cover = defined $book->{'coperta'};
+	$cover =~ s/\"/\\"/g;
+	$epub_parameters .= " --cover=\"$cover\"";
+    }
 
     my $in_file = $book->{"out"}->{"html_file_clean"};
     my ($out_file, $output);
 
     ### normal epub
     $out_file = $book->{"out"}->{"epub_normal"};
-    if (! $book->{"result"}->{"epub_normal"} eq "done"){
+    if ($book->{"result"}->{"epub_normal"} ne "done"){
       Common::my_print "Converting to epub.\n";
       Common::makedir("$dir/normal/");
       $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover`;
@@ -480,7 +485,7 @@ sub html_to_epub {
 
     ### epub with external font
     $out_file = $book->{"out"}->{"epub_font_external"};
-    if (! $book->{"result"}->{"epub_font_external"} eq "done"){
+    if ($book->{"result"}->{"epub_font_external"} ne "done"){
       Common::my_print "Converting to epub with external font.\n";
       Common::makedir("$dir/external/");
       $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"`;
@@ -490,7 +495,7 @@ sub html_to_epub {
 
     ### epub with embedded font
     $out_file = $book->{"out"}->{"epub_font_included"};
-    if (! $book->{"result"}->{"epub_font_included"} eq "done"){
+    if ($book->{"result"}->{"epub_font_included"} ne "done"){
       Common::my_print "Converting to epub with embedded font.\n";
       Common::makedir("$dir/internal/");
       $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"`;
@@ -501,7 +506,7 @@ sub html_to_epub {
 
     ### normal mobi
     $out_file = $book->{"out"}->{"mobi"};
-    if (! $book->{"result"}->{"mobi"} eq "done"){
+    if ($book->{"result"}->{"mobi"} ne "done"){
       Common::my_print "Converting to mobi.\n";
       Common::makedir("$dir/mobi/");
       $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters`;
@@ -611,8 +616,10 @@ sub focker_launcher {
 	    die "Can't fork.\n" if ! defined ($pid);
 	    if($pid==0) {
 		Common::my_print_prepand("$crt $crt_worker $name ");
+		$knot->shlock;
 		$shared_data{'nr_processes'}++;
 $shared_data{$crt_worker}{$DataElement} = 1;
+		$knot->shunlock;
 		$function->($DataElement);
 		exit (0);
 	    }

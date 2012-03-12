@@ -18,7 +18,10 @@ sub xmlfile_to_hash {
     my $file = shift;
     my $xml = new XML::Simple;
     my $hash = $xml->XMLin("$file", SuppressEmpty => 1);
-    $hash->{$_} = Encode::encode('utf8', $hash->{$_}) foreach (keys %$hash);
+    foreach (keys %$hash){
+	$hash->{$_} = encode_utf8($hash->{$_}) if (defined $hash->{$_} && !ref($hash->{$_}))
+    };
+
     return $hash;
 }
 
@@ -27,8 +30,9 @@ sub hash_to_xmlfile {
     my ($file,$dir,$suffix) = fileparse("$name", qr/\.[^.]*/);
     makedir($dir);
     $root_name = "out" if ! defined $root_name;
-#     my %hash_copy = %$hash;
-    $hash->{$_} = decode_utf8($hash->{$_}) foreach (keys %$hash);
+    foreach (keys %$hash){
+	$hash->{$_} = decode_utf8($hash->{$_}) if (defined $hash->{$_} && !ref($hash->{$_}))
+    };
 
     my $xs = new XML::Simple();
     unlink $name;
@@ -39,7 +43,9 @@ sub hash_to_xmlfile {
 		    SuppressEmpty => 1,
 		    XMLDecl => '<?xml version="1.0" encoding="UTF-8"?>'
 		    );
-    $hash->{$_} = Encode::encode('utf8', $hash->{$_}) foreach (keys %$hash);
+    foreach (keys %$hash){
+	$hash->{$_} = encode_utf8($hash->{$_}) if (defined $hash->{$_} && !ref($hash->{$_}))
+    };
 }
 
 sub get_file_md5 {
