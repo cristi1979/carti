@@ -307,15 +307,16 @@ sub get_documents {
 	$book->{"out"}->{"epub_font_external"} = "$work_prefix/$dir_x/$name_x\_external.epub";
 	$book->{"out"}->{"mobi"} = "$work_prefix/$dir_x/$name_x.mobi";
 
-	my $key = "$dir_x";
+	my $key = $dir_x;
+	$key =~ s/\///g;;
 	die "Book already exists: $key ($file)\n".Dumper($files_to_import->{$key}) if defined $files_to_import->{$key};
-	$files_to_import->{$key} = $book;
 	if (defined $files_already_imported->{$key}) {
-	    my $crt_file = $files_already_imported->{$key};
-	    foreach my $akey (keys %$crt_file){
-		$files_to_import->{"$key"}->{$akey} = $crt_file->{$akey} if ! defined $files_to_import->{"$key"}->{$akey};
+	    foreach (keys %{$files_already_imported->{$key}}){
+		## update only what we have defined. Else is deprecated
+		$book->{$_} = $files_already_imported->{$key}->{$_} if defined $book->{$_};
 	    }
 	}
+	$files_to_import->{$key} = $book;
     }
     print "Get all files.\n";
     find ({wanted => sub { add_document ($File::Find::name) if -f },},"$docs_prefix") if -d "$docs_prefix";
@@ -330,12 +331,14 @@ sub get_existing_documents {
     opendir(DIR, "$work_prefix") || die("Cannot open directory $work_prefix.\n");
     my @alldirs = grep { (!/^\.\.?$/) && -d "$work_prefix/$_" } readdir(DIR);
     closedir(DIR);
+    my $count = 0;
     foreach my $dir (sort @alldirs) {
 	if (! -f "$work_prefix/$dir/$control_file"){
 	    print "Remove wrong dir $work_prefix/$dir.\n";
 	    remove_tree("$work_prefix/$dir") || die "Can't remove dir $work_prefix/$dir: $!.\n";
 	    next;
 	}
+	print "$count\r" if ++$count % 10 == 0;
 	$files_already_imported->{$dir} = Common::xmlfile_to_hash("$work_prefix/$dir/$control_file");
     }
 # print Dumper($files_already_imported);exit 1;
@@ -376,7 +379,6 @@ sub convert_images {
 sub libreoffice_to_html {
     my $xml_book = shift;
     my $book = Common::xmlfile_to_hash($xml_book);
-# print Dumper($book);exit 1;
     my ($work_dir, $title, $html_file) =($book->{"workingdir"}, $book->{"title"}, $book->{"out"}->{"html_file"});
 
     my $working_file = "$work_dir/$book->{'doc_filename_fixed'}";
@@ -407,6 +409,8 @@ sub libreoffice_html_clean {
 	## wait for others to finish:
 	print "\t\t************ Single for $title.************\n";
 print Dumper(%shared_data);
+	$shared_data{'single_mode'} = undef;
+die "testes\n";
 	usleep(100000) while ($shared_data{'nr_processes'} > 1);
     } else {
 	$shared_data{'single_mode'} = undef;
@@ -440,7 +444,7 @@ sub libreoffice_html_to_epub {
 	opendir(DIR, "$work_dir");
 	my @images = grep(/\.jpg$/,readdir(DIR));
 	closedir(DIR);
-	html_to_epub($book);
+	html_to_epub($book, $xml_book);
 	unlink "$work_dir/$_" foreach (@images);
 	unlink "$html_file_clean" || die "Can't remove file $html_file_clean: $!\n";
 	$book->{"result"}->{"ebook"} = "done";
@@ -449,8 +453,21 @@ sub libreoffice_html_to_epub {
     print Dumper($title, $@). "error: $?.\n" if ($@);
 }
 
+sub make_ebook {
+    my ($book, $type, $epub_command, $epub_parameters) = @_;
+    my $in_file = $book->{"out"}->{"html_file_clean"};
+    my $out_file = $book->{"out"}->{$type};
+    my $cmd = "$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover";
+    if (! defined $book->{"result"}->{$type} ne "done" || $book->{"result"}->{$type} ne "done"){
+      Common::my_print "Converting to epub.\n";
+      my $output = `$cmd`;
+      die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$cmd\n\n" if ! -s $out_file;
+      $book->{"result"}->{$type} = "done";
+    }
+}
+
 sub html_to_epub {
-    my $book = shift;
+    my ($book, $xml_book) = @_;
     my ($name, $authors, $dir, $title) = ($book->{'safe_name'}, $book->{'auth'}, $book->{'workingdir'}, $book->{'title'});
     my @tags = ();
     push @tags, "scurte" if defined $book->{'scurte'};
@@ -471,44 +488,60 @@ sub html_to_epub {
     }
 
     my $in_file = $book->{"out"}->{"html_file_clean"};
-    my ($out_file, $output);
+    my ($out_file, $output, $type);
 
     ### normal epub
-    $out_file = $book->{"out"}->{"epub_normal"};
-    if (!defined $book->{"result"}->{"epub_normal"} || $book->{"result"}->{"epub_normal"} ne "done"){
-      Common::my_print "Converting to epub.\n";
-      $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover`;
-      die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover\n\n" if ! -s $out_file;
-      $book->{"result"}->{"epub_normal"} = "done"
-    }
+    make_ebook($book, "epub_normal", $epub_command,  "$epub_parameters --no-default-epub-cover");
+    Common::hash_to_xmlfile($book, $xml_book);
+#     $type = "epub_normal";
+#     $out_file = $book->{"out"}->{$type};
+#     if (! defined $book->{"result"}->{$type} ne "done" || $book->{"result"}->{$type} ne "done"){
+#       Common::my_print "Converting to epub.\n";
+#       $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover`;
+#       die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover\n\n" if ! -s $out_file;
+#       $book->{"result"}->{$type} = "done";
+#       Common::hash_to_xmlfile($book, $xml_book);
+#     }
 
     ### epub with external font
-    $out_file = $book->{"out"}->{"epub_font_external"};
-    if (!defined $book->{"result"}->{"epub_font_external"} || $book->{"result"}->{"epub_font_external"} ne "done"){
-      Common::my_print "Converting to epub with external font.\n";
-      $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"`;
-      die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover\n\n" if ! -s $out_file;
-      $book->{"result"}->{"epub_font_external"} = "done"
-    }
+    make_ebook($book, "epub_font_external", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"");
+    Common::hash_to_xmlfile($book, $xml_book);
+#     $type = "epub_font_external";
+#     $out_file = $book->{"out"}->{$type};
+#     if (! defined $book->{"result"}->{$type} ne "done" || $book->{"result"}->{$type} ne "done"){
+#       Common::my_print "Converting to epub with external font.\n";
+#       $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"`;
+#       die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover\n\n" if ! -s $out_file;
+#       $book->{"result"}->{$type} = "done";
+#       Common::hash_to_xmlfile($book, $xml_book);
+#     }
 
     ### epub with embedded font
-    $out_file = $book->{"out"}->{"epub_font_included"};
-    if (!defined $book->{"result"}->{"epub_font_included"} || $book->{"result"}->{"epub_font_included"} ne "done"){
-      Common::my_print "Converting to epub with embedded font.\n";
-      $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"`;
-      Common::add_file_to_zip($out_file, "$script_dir/tools/$font");
-      die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover\n\n" if ! -s $out_file;
-      $book->{"result"}->{"epub_font_external"} = "done"
-    }
+    make_ebook($book, "epub_font_included", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"");
+    Common::hash_to_xmlfile($book, $xml_book);
+#     $type = "epub_font_included";
+#     $out_file = $book->{"out"}->{$type};
+#     if (! defined $book->{"result"}->{$type} ne "done" || $book->{"result"}->{$type} ne "done"){
+#       Common::my_print "Converting to epub with embedded font.\n";
+#       $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"`;
+#       Common::add_file_to_zip($out_file, "$script_dir/tools/$font");
+#       die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover\n\n" if ! -s $out_file;
+#       $book->{"result"}->{$type} = "done";
+#       Common::hash_to_xmlfile($book, $xml_book);
+#     }
 
     ### normal mobi
-    $out_file = $book->{"out"}->{"mobi"};
-    if (!defined $book->{"result"}->{"mobi"} || $book->{"result"}->{"mobi"} ne "done"){
-      Common::my_print "Converting to mobi.\n";
-      $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters`;
-      die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover\n\n" if ! -s $out_file;
-      $book->{"result"}->{"mobi"} = "done"
-    }
+    make_ebook($book, "mobi", $epub_command,  "$epub_parameters");
+    Common::hash_to_xmlfile($book, $xml_book);
+#     $type = "mobi";
+#     $out_file = $book->{"out"}->{$type};
+#     if (! defined $book->{"result"}->{$type} ne "done" || $book->{"result"}->{$type} ne "done"){
+#       Common::my_print "Converting to mobi.\n";
+#       $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters`;
+#       die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover\n\n" if ! -s $out_file;
+#       $book->{"result"}->{$type} = "done";
+#       Common::hash_to_xmlfile($book, $xml_book);
+#     }
 }
 
 sub clean_files {
@@ -592,8 +625,8 @@ sub focker_launcher {
     while (1) {
 	usleep(100000);
 	$knot->shlock;
-	my %hash_queue = %{$shared_data{$crt_worker}{'queue'}};
-	foreach (keys %hash_queue){
+# 	my %hash_queue = %{$shared_data{$crt_worker}{'queue'}};
+	foreach (keys %{$shared_data{$crt_worker}{'queue'}}){
 	    push @queue, $_;
 	    delete $shared_data{$crt_worker}{'queue'}{$_};
 	}
@@ -613,13 +646,12 @@ sub focker_launcher {
 	    if($pid==0) {
 		Common::my_print_prepand("$crt $crt_worker $name ");
 		$knot->shlock;
-		$shared_data{$crt_worker}{$DataElement}{'ok'} = 0;
+		$shared_data{$crt_worker}{$DataElement} = 0;
 		$shared_data{'nr_processes'}++;
-		$shared_data{$crt_worker}{$DataElement} = 1;
 		$knot->shunlock;
 		$function->($DataElement);
 		$knot->shlock;
-		$shared_data{$crt_worker}{$DataElement}{'ok'} = 1;
+		$shared_data{$crt_worker}{$DataElement} = 1;
 		$knot->shunlock;
 		exit (0);
 	    }
@@ -638,8 +670,8 @@ sub focker_launcher {
 		my $DataElement = $running->{$pid}->{'xml_file'};
 		push @thread, $running->{$pid}->{'thread_nr'};
 		$knot->shlock;
+		$shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker && $shared_data{$crt_worker}{$DataElement};
 		delete $shared_data{$crt_worker}{$DataElement};
-		$shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker && $shared_data{$crt_worker}{$DataElement}{'ok'};
 		$shared_data{'nr_processes'}--;
 		$shared_data{'single_mode'} = undef if defined $shared_data{'single_mode'} && $shared_data{'single_mode'} eq $DataElement;
 		$knot->shunlock;
@@ -657,8 +689,8 @@ sub focker_launcher {
 	    my $DataElement = $running->{$pid}->{'xml_file'};
 	    push @thread, $running->{$pid}->{'thread_nr'};
 	    $knot->shlock;
+	    $shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker && $shared_data{$crt_worker}{$DataElement};
 	    delete $shared_data{$crt_worker}{$DataElement};
-	    $shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker && $shared_data{$crt_worker}{$DataElement}{'ok'};
 	    $shared_data{'nr_processes'}--;
 	    $shared_data{'single_mode'} = undef if defined $shared_data{'single_mode'} && $shared_data{'single_mode'} eq $DataElement;
 	    $knot->shunlock;
