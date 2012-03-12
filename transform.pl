@@ -613,10 +613,14 @@ sub focker_launcher {
 	    if($pid==0) {
 		Common::my_print_prepand("$crt $crt_worker $name ");
 		$knot->shlock;
+		$shared_data{$crt_worker}{$DataElement}{'ok'} = 0;
 		$shared_data{'nr_processes'}++;
-$shared_data{$crt_worker}{$DataElement} = 1;
+		$shared_data{$crt_worker}{$DataElement} = 1;
 		$knot->shunlock;
 		$function->($DataElement);
+		$knot->shlock;
+		$shared_data{$crt_worker}{$DataElement}{'ok'} = 1;
+		$knot->shunlock;
 		exit (0);
 	    }
 	    print "$crt_worker started $name\n" if $pid > 0;
@@ -634,8 +638,8 @@ $shared_data{$crt_worker}{$DataElement} = 1;
 		my $DataElement = $running->{$pid}->{'xml_file'};
 		push @thread, $running->{$pid}->{'thread_nr'};
 		$knot->shlock;
-delete $shared_data{$crt_worker}{$DataElement};
-		$shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker;
+		delete $shared_data{$crt_worker}{$DataElement};
+		$shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker && $shared_data{$crt_worker}{$DataElement}{'ok'};
 		$shared_data{'nr_processes'}--;
 		$shared_data{'single_mode'} = undef if defined $shared_data{'single_mode'} && $shared_data{'single_mode'} eq $DataElement;
 		$knot->shunlock;
@@ -651,13 +655,14 @@ delete $shared_data{$crt_worker}{$DataElement};
 	if ($pid > 0) {
 	    die "Unknown pid: $pid.\n".Dumper($running) if ! defined $running->{$pid};
 	    my $DataElement = $running->{$pid}->{'xml_file'};
-	    print "$crt_worker reapead $running->{$pid}->{'name'}\n";
 	    push @thread, $running->{$pid}->{'thread_nr'};
 	    $knot->shlock;
-	    $shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker;
+	    delete $shared_data{$crt_worker}{$DataElement};
+	    $shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker && $shared_data{$crt_worker}{$DataElement}{'ok'};
 	    $shared_data{'nr_processes'}--;
 	    $shared_data{'single_mode'} = undef if defined $shared_data{'single_mode'} && $shared_data{'single_mode'} eq $DataElement;
 	    $knot->shunlock;
+	    print "$crt_worker reapead $running->{$pid}->{'name'}\n";
 	    delete $running->{$pid};
 	}
     } while ($pid>0);

@@ -704,7 +704,7 @@ sub clean_html_from_oo {
     $tree = doc_tree_remove_empty_span($tree);
     $tree = doc_tree_clean_defs($tree);
     ($tree, $images) = doc_tree_fix_links_from_oo($tree, $no_links);
-    $tree = doc_tree_clean_h($tree, 0);
+#     $tree = doc_tree_clean_h($tree, 0);
     $tree = doc_tree_clean_div($tree);
     $tree = doc_tree_clean_multicol($tree);
     $tree = doc_tree_clean_b_i($tree);
@@ -730,8 +730,8 @@ sub clean_html_from_oo {
     if ($txt1 ne $txt2) {
 	$txt1 =~ s/,/\n/g;    $txt2 =~ s/,/\n/g;
 	Common::write_file("$work_dir/html2.html", $html);
-	Common::write_file("$work_dir/txt1.html", $txt1);
-	Common::write_file("$work_dir/txt2.html", $txt2);
+	Common::write_file("$work_dir/txt1.txt", $txt1);
+	Common::write_file("$work_dir/txt2.txt", $txt2);
 	die "Text mismatch.\n";
     }
     return (html_tidy($html), $images);
