@@ -665,7 +665,8 @@ sub focker_launcher {
 	    print "$crt_worker reapead $running->{$pid}->{'name'}\n";
 	    delete $running->{$pid};
 	}
-    } while ($pid>0);
+	usleep(100000);
+    } while (scalar keys %$running);
 
     $knot->shlock;
     $shared_data{$next_worker}{'queue_done'} = 1 if defined $next_worker;
