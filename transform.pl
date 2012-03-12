@@ -494,55 +494,18 @@ sub html_to_epub {
     ### normal epub
     make_ebook($book, "epub_normal", $epub_command,  "$epub_parameters --no-default-epub-cover");
     Common::hash_to_xmlfile($book, $xml_book);
-#     $type = "epub_normal";
-#     $out_file = $book->{"out"}->{$type};
-#     if (! defined $book->{"result"}->{$type} ne "done" || $book->{"result"}->{$type} ne "done"){
-#       Common::my_print "Converting to epub.\n";
-#       $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover`;
-#       die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover\n\n" if ! -s $out_file;
-#       $book->{"result"}->{$type} = "done";
-#       Common::hash_to_xmlfile($book, $xml_book);
-#     }
 
     ### epub with external font
     make_ebook($book, "epub_font_external", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"");
     Common::hash_to_xmlfile($book, $xml_book);
-#     $type = "epub_font_external";
-#     $out_file = $book->{"out"}->{$type};
-#     if (! defined $book->{"result"}->{$type} ne "done" || $book->{"result"}->{$type} ne "done"){
-#       Common::my_print "Converting to epub with external font.\n";
-#       $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"`;
-#       die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover\n\n" if ! -s $out_file;
-#       $book->{"result"}->{$type} = "done";
-#       Common::hash_to_xmlfile($book, $xml_book);
-#     }
 
     ### epub with embedded font
     make_ebook($book, "epub_font_included", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"");
     Common::hash_to_xmlfile($book, $xml_book);
-#     $type = "epub_font_included";
-#     $out_file = $book->{"out"}->{$type};
-#     if (! defined $book->{"result"}->{$type} ne "done" || $book->{"result"}->{$type} ne "done"){
-#       Common::my_print "Converting to epub with embedded font.\n";
-#       $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"`;
-#       Common::add_file_to_zip($out_file, "$script_dir/tools/$font");
-#       die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover\n\n" if ! -s $out_file;
-#       $book->{"result"}->{$type} = "done";
-#       Common::hash_to_xmlfile($book, $xml_book);
-#     }
 
     ### normal mobi
     make_ebook($book, "mobi", $epub_command,  "$epub_parameters");
     Common::hash_to_xmlfile($book, $xml_book);
-#     $type = "mobi";
-#     $out_file = $book->{"out"}->{$type};
-#     if (! defined $book->{"result"}->{$type} ne "done" || $book->{"result"}->{$type} ne "done"){
-#       Common::my_print "Converting to mobi.\n";
-#       $output = `$epub_command \"$in_file\" \"$out_file\" $epub_parameters`;
-#       die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$epub_command \"$in_file\" \"$out_file\" $epub_parameters --no-default-epub-cover\n\n" if ! -s $out_file;
-#       $book->{"result"}->{$type} = "done";
-#       Common::hash_to_xmlfile($book, $xml_book);
-#     }
 }
 
 sub clean_files {
