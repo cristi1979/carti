@@ -27,19 +27,19 @@ sub hash_to_xmlfile {
     my ($file,$dir,$suffix) = fileparse("$name", qr/\.[^.]*/);
     makedir($dir);
     $root_name = "out" if ! defined $root_name;
-    my %hash_copy = %$hash;
-    $hash_copy{$_} = decode_utf8($hash_copy{$_}) foreach (keys %hash_copy);
+#     my %hash_copy = %$hash;
+    $hash->{$_} = decode_utf8($hash->{$_}) foreach (keys %$hash);
 
     my $xs = new XML::Simple();
     unlink $name;
-    my $xml = $xs->XMLout(\%hash_copy,
+    my $xml = $xs->XMLout($hash,
 		    NoAttr => 1,
 		    RootName=>$root_name,
 		    OutputFile => $name,
 		    SuppressEmpty => 1,
 		    XMLDecl => '<?xml version="1.0" encoding="UTF-8"?>'
 		    );
-#     $hash->{$_} = Encode::encode('utf8', $hash->{$_}) foreach (keys %$hash);
+    $hash->{$_} = Encode::encode('utf8', $hash->{$_}) foreach (keys %$hash);
 }
 
 sub get_file_md5 {
