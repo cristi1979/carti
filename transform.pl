@@ -76,6 +76,7 @@ my $table_info_def = "
     LIBREOFFICE_DONE INTEGER,
     CLEAN_DONE INTEGER,
     EBOOK_DONE INTEGER,
+    ALL_DONE INTEGER,
     SINGLE_MODE TEXT";
 
 sub dbi_error_handler {
@@ -660,7 +661,12 @@ sub focker_launcher {
 	usleep(100000);
     } while (scalar keys %$running);
 
-    update_proc($dbh, "UPDATE $table_info_name set $next_worker\_done=1") if defined $next_worker;
+    if (defined $next_worker) {
+	update_proc($dbh, "UPDATE $table_info_name set $next_worker\_done=1");
+    } else {
+	update_proc($dbh, "UPDATE $table_info_name set ALL_DONE=1");
+    }
+
     print "($crt_worker). FIN *******************.\n";
 }
 
@@ -669,7 +675,7 @@ sub periodic_checks {
     print "Starting checks process.\n";
     my ($dbh, $sth, $sth_work, $sth_info, $row);
     $dbh = connect_sqlite($dbh, $path_to_db_file);
-    $sth = $dbh->prepare("SELECT ebook_done FROM $table_info_name");
+    $sth = $dbh->prepare("SELECT ALL_DONE FROM $table_info_name");
     $sth_work = $dbh->prepare("SELECT worker_name, pid, xml_file FROM $table_work_name where pid>0");
     $sth_info = $dbh->prepare("SELECT libreoffice_running, clean_running, ebook_running, ifnull(single_mode,'none') FROM $table_info_name");
     my $parents->{$main_proc} = "main";
@@ -702,8 +708,8 @@ sub periodic_checks {
 	}
 	sleep 1;
 	$sth->execute();
-print "**************************************************
-$string**************************************************\n";
+	print "**************************************************
+	$string**************************************************\n";
     } while (! @{$sth->fetch}[0]);
     print "(checks). FIN *******************.\n";
 }
@@ -721,7 +727,7 @@ sub main_process_worker {
     $dbh->do("CREATE TABLE $table_info_name ($table_info_def);");
     do { eval{$dbh->selectall_arrayref( "SELECT * FROM work")}} until (! $@);
 # LIBREOFFICE CLEAN EBOOK LIBREOFFICE_RUNNING CLEAN_RUNNING EBOOK_RUNNING LIBREOFFICE_DONE CLEAN_DONE EBOOK_DONE SINGLE_MODE
-    $dbh->do( "INSERT INTO $table_info_name VALUES (1, 6, 3, 0, 0, 0, 0, 0, 0, NULL)");
+    $dbh->do( "INSERT INTO $table_info_name VALUES (1, 6, 3, 0, 0, 0, 0, 0, 0, 0, NULL)");
 
     my ($forks, $pid);
     $pid = fork();
