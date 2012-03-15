@@ -17,7 +17,9 @@ use Encode;
 sub xmlfile_to_hash {
     my $file = shift;
     my $xml = new XML::Simple;
-    my $hash = $xml->XMLin("$file", SuppressEmpty => 1);
+    my $hash;
+    eval{$hash = $xml->XMLin("$file", SuppressEmpty => 1)};
+    return if $@;
     foreach (keys %$hash){
 	$hash->{$_} = encode_utf8($hash->{$_}) if (defined $hash->{$_} && !ref($hash->{$_}))
     };

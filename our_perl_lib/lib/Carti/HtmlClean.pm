@@ -381,7 +381,7 @@ sub doc_tree_fix_paragraphs_start {
 		last;
 	    }
 	    die "Paragraph starts with : ".(encode_utf8($$content_tag)).":$$content_tag (".($a_tag->as_text).").\n" if
-		      $a_tag->as_text !~ m/^\s*(\x{2014}|\x{a9}|\x{25a0}|\x{2022}|\x{201c}|\x{2018}|\x{201e}|\x{2026}|\x{201d}|\x{be}|\x{a7}|\x{bb}|\x{ab})/i &&
+		      $a_tag->as_text !~ m/^\s*(\x{2014}|\x{a9}|\x{a3}|\x{25a0}|\x{2022}|\x{201c}|\x{2018}|\x{201e}|\x{2026}|\x{201d}|\x{be}|\x{a7}|\x{bb}|\x{ab})/i &&
 		      $a_tag->as_text !~ m/^\s*[\p{L} a-z0-9 !@#$%^&*()\[\]{};'\\:"|,\.\/<>\_?~`]/i &&
 		      $a_tag->as_text !~ m/^\s*$/i;
 	}

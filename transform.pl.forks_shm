@@ -29,13 +29,16 @@ $Data::Dumper::Sortkeys = 1;
 use URI::Escape;
 use Time::HiRes qw(usleep nanosleep);
 use File::stat;
+# use IO::Select;
 use POSIX ":sys_wait_h";
-use DBI;
+# $SIG{CHLD} = 'IGNORE';
 
 use Carti::HtmlClean;
 use Carti::Common;
+use Carti::WikiTxtClean;
 
 my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
+`$script_dir/clear_shm.sh`;
 my $extra_tools_dir = "$script_dir/tools";
 
 my $workign_mode = shift;
@@ -48,56 +51,60 @@ our $duplicate_files = {};
 my $duplicate_file = "$script_dir/duplicate_files";
 
 my $control_file = "doc_info_file.xml";
-# my $work_prefix = "/media/carti/work";
-my $work_prefix = "./work";
+my $work_prefix = "/media/carti/work";
+# my $work_prefix = "./work";
 $work_prefix = abs_path($work_prefix);
-Common::makedir($work_prefix);
-my $path_to_db_file = "/dev/shm/sqlitedb.sqlite";
 
 my $debug = 1;
 my $url_sep = " -- ";
 my $font = "BookmanOS.ttf";
 my $Xdisplay = ":12345";
 
-my $table_work_name = "WORK";
-my $table_work_def = "
-    XML_FILE TEXT UNIQUE,
-    WORKER_NAME TEXT,
-    STATUS TEXT,
-    PID INTEGR";
-my $table_info_name = "INFO";
-my $table_info_def = "
-    LIBREOFFICE INTEGER,
-    CLEAN INTEGER,
-    EBOOK INTEGER,
-    LIBREOFFICE_RUNNING INTEGER,
-    CLEAN_RUNNING INTEGER,
-    EBOOK_RUNNING INTEGER,
-    LIBREOFFICE_DONE INTEGER,
-    CLEAN_DONE INTEGER,
-    EBOOK_DONE INTEGER,
-    SINGLE_MODE TEXT";
+use IPC::Shareable (':all');
+my $glue = 'data';
+my %shared_data;
+my %options = (
+     create    => 1,
+     exclusive => 1,
+     mode      => 0660,
+     destroy   => 1,
+     size      => 1024*1024,
+ );
+my $knot = tie %shared_data, 'IPC::Shareable', $glue, { %options } or die "server: tie failed\n";
+$knot->remove;
+IPC::Shareable->clean_up_all;
+$knot = tie %shared_data, 'IPC::Shareable', $glue, { %options } or die "server: tie failed\n";
+$shared_data{'libreoffice'}{'queue'} = {};
+$shared_data{'libreoffice'}{'threads'} = 1;
+$shared_data{'libreoffice'}{'queue_done'} = 0;
 
-sub dbi_error_handler {
-    my( $message, $handle, $first_value ) = @_;
-    die "Caught: \n".Dumper($message, $handle, $first_value);
-}
+$shared_data{'epub'}{'queue'} = {};
+$shared_data{'epub'}{'threads'} = 4;
+$shared_data{'epub'}{'queue_done'} = 0;
 
-sub connect_sqlite {
-    my ($dbh, $db_name) = @_;
-    $dbh = DBI->connect("dbi:SQLite:dbname=$db_name","","",
-	    { RaiseError => 1,
-	      AutoCommit => 1,
-	      sqlite_use_immediate_transaction => 1,
-	      PrintError         => 1,
-	      ShowErrorStatement => 1,
-	      HandleError        => \&dbi_error_handler,
-	    }) || die "Cannot connect: $DBI::errstr";
-    $dbh->do("PRAGMA synchronous  = ON");
-    $dbh->do("PRAGMA temp_store  = MEMORY");
-    $dbh->do("PRAGMA cache_size  = 4000000");
-    return $dbh;
-}
+$shared_data{'clean'}{'queue'} = {};
+$shared_data{'clean'}{'threads'} = 6;
+$shared_data{'clean'}{'queue_done'} = 0;
+
+$shared_data{'single_mode'} = undef;
+$shared_data{'nr_processes'} = 0;
+# $SIG{INT} = \&catch_int; sub catch_int {  die; }
+
+# use Devel::Size qw(size total_size);
+# sub get_mem_info {
+#     my @proc_mem = split /\s+/, Common::read_file("/proc/$$/stat");
+#     my ($stat_threads, $stat_vsize, $stat_rss) = ($proc_mem[19], $proc_mem[22]/1024, $proc_mem[23]/1024);
+#     my @system_mem = split /\n/, Common::read_file("/proc/meminfo");
+#     s/(^[a-z]+:\s+)//i for(@system_mem);
+#     s/(\s+[a-z]+$)//i for(@system_mem);
+#     my ($sys_mem, $sys_mem_free, $sys_cache) = ($system_mem[0], $system_mem[1], $system_mem[3]);
+#     print Dumper(
+# "html queue ".total_size($DataQueue_html_clean),
+# "calibre queue ".total_size($DataQueue_calibre_epub),
+# "semaphore ".total_size($sema),
+# );
+#     return ($stat_threads, $stat_vsize, $stat_rss, $sys_mem, $sys_mem_free, $sys_cache);
+# }
 
 sub get_files_from_dir {
     my $dir_q = shift;
@@ -127,10 +134,10 @@ sub get_authors {
     my $author = shift;
     my $authors;
     foreach my $tmp (split "&", $author) {
-	$tmp =~ s/(^\s+|\s+$)//g;
+	$tmp =~s/(^\s+|\s+$)//g;
 	my @tmp1 = split /\s/, $tmp;
 	my $tmp1 = (pop @tmp1).", ". join " ", @tmp1;
-	$tmp1 =~ s/(^\s+|\s+$)//g;
+	$tmp1 =~s/(^\s+|\s+$)//g;
 	$authors->{$tmp} = "nume prenume";
 	$authors->{$tmp1} = "prenume, nume";
     }
@@ -397,14 +404,16 @@ sub libreoffice_html_clean {
     my $book = Common::xmlfile_to_hash($xml_book);
     my ($work_dir, $title, $html_file_orig) =($book->{"workingdir"}, $book->{"title"}, $book->{"out"}->{"html_file_orig"});
     my $file_max_size_single_thread = 10000000;
-    my $dbh;$dbh = connect_sqlite($dbh, $path_to_db_file);
-    my $sth = $dbh->prepare( "select libreoffice_running+clean_running+ebook_running from $table_info_name");
+    
     if (-f $html_file_orig && -s $html_file_orig > $file_max_size_single_thread) {
 	## wait for others to finish:
 	Common::my_print "\t\t************ Single for $title.************\n";
-	do {usleep(100000);$sth->execute()}while (@{$sth->fetch}[0]>1);
+# 	print Dumper(%shared_data);
+	while ($shared_data{'nr_processes'} > 1) {usleep(100000);print Dumper(%shared_data);};
     } else {
-	update_proc($dbh, "UPDATE $table_info_name set single_mode=NULL where single_mode=".$dbh->quote($xml_book."/clean"));
+	$knot->shlock;
+	$shared_data{'single_mode'} = undef;
+	$knot->shunlock;
     }
 
     eval {
@@ -572,172 +581,144 @@ sub ri_html_to_epub {
     Common::write_file(encode_utf8("__"."$html_file"), HtmlClean::html_tidy($html));
 }
 
-sub update_proc {
-    my ($dbh, $txt, $dontcare) = @_;
-    my $res = $dbh->do($txt);
-    die "\t\tMortii matii:\n$txt\n" if ! defined $dontcare && $res eq "0E0";
-# print "$txt\n$res\n" if $res eq "0E0";
-    return $res ne "0E0"?1:0;
-}
-
-sub reap_children {
-    my ($dbh, $running, $crt_worker, $next_worker) = @_;
-    my $thread_nr;
-    my $pid = waitpid(-1, WNOHANG);
-    if ($pid > 0) {
-	die "Unknown pid: $pid.\n".Dumper($running) if ! defined $running->{$pid};
-	my $xml_file = $running->{$pid}->{'xml_file'};
-	$thread_nr = $running->{$pid}->{'thread_nr'};
-	if (defined $next_worker) {
-	    update_proc($dbh, "UPDATE $table_work_name set worker_name='$next_worker', status='start', PID=0 where status='working' and worker_name='$crt_worker' and xml_file=".$dbh->quote($xml_file));
-	} else {
-	    update_proc($dbh, "UPDATE $table_work_name set worker_name='$crt_worker', status='done', pid=0 where status='working' and worker_name='$crt_worker' and xml_file=".$dbh->quote($xml_file));
-	}
-	print "\t\t$crt_worker ($pid) $running->{$pid}->{'name'} reapead.\n";
-	delete $running->{$pid};
-	update_proc($dbh, "UPDATE $table_info_name set $crt_worker\_running=".(scalar keys %$running));
-	update_proc($dbh, "UPDATE $table_info_name set single_mode=NULL where single_mode=".$dbh->quote($xml_file."/$crt_worker"), 1);
-	die "Thread number should be positive.\n" if $thread_nr < 1;
-	return $thread_nr;
-    }
-    return undef;
-}
-# LIBREOFFICE CLEAN EBOOK LIBREOFFICE_RUNNING CLEAN_RUNNING EBOOK_RUNNING LIBREOFFICE_DONE CLEAN_DONE EBOOK_DONE SINGLE_MODE
 sub focker_launcher {
     my ($function, $crt_worker, $next_worker) = @_;
     print "starting forker process $crt_worker.\n";
-    my ($running, $sth, $dbh, @queue);
-    $dbh = connect_sqlite($dbh, $path_to_db_file);
+    my ($running, @queue);
     my @thread = (1..20);
     while (1) {
-	my ($max_procs, $worker_done) = @{shift $dbh->selectall_arrayref( "SELECT $crt_worker, $crt_worker\_done FROM $table_info_name")};
-	my $data = $dbh->selectall_arrayref("SELECT xml_file FROM $table_work_name where WORKER_NAME = '$crt_worker' and STATUS='start'");
-	foreach (@$data){
-	    my $xml_file = shift $_;
-	    push @queue, $xml_file;
-	    update_proc($dbh, "UPDATE $table_work_name set status='collected' where status='start' and worker_name='$crt_worker' and xml_file=".$dbh->quote($xml_file));
+# print "$crt_worker try new.\n";
+	$knot->shlock;
+	foreach (keys %{$shared_data{$crt_worker}{'queue'}}){
+	    push @queue, $_;
+	    delete $shared_data{$crt_worker}{'queue'}{$_};
 	}
-	last if $worker_done && ! scalar @queue;
+	$knot->shunlock;
+	last if $shared_data{$crt_worker}{'queue_done'} && ! scalar @queue;
 
-	my $xml_file = shift @queue;
-	if ((scalar keys %$running) < $max_procs && defined $xml_file &&
-		update_proc($dbh, "UPDATE $table_info_name set single_mode=".$dbh->quote($xml_file."/".$crt_worker)." where single_mode is null", 1)){
-	    my $name = (split /$url_sep/, ((split /\/+/, $xml_file)[-2]))[-1];
+	if ((scalar keys %$running) < $shared_data{$crt_worker}{'threads'} &&
+		    scalar @queue &&
+		    $knot->shlock(LOCK_SH|LOCK_NB) &&
+		    ! defined $shared_data{'single_mode'}){
+# print "$crt_worker try ok.\n";
+	    ## presume we need to run in single mode. Clear in forked process if not the case
+	    my $DataElement = shift @queue;
+	    $shared_data{'single_mode'} = "$crt_worker $DataElement" if $crt_worker eq "clean";
+	    $knot->shunlock;
+	    my $name = (split /$url_sep/, ((split /\/+/, $DataElement)[-2]))[-1];
 	    my $crt = shift @thread;
-	    die "We should always have something.\n" if ! defined $crt;
 	    my $pid = fork();
 	    if (! defined ($pid)){
+		$knot->shlock;
+		$shared_data{'single_mode'} = undef;
+		$knot->shunlock;
+# print "$crt_worker try fail.\n";
 		die "Can't fork $crt_worker $name.\n";
 	    } elsif($pid==0) {
-		Common::my_print_prepand("\t$crt_worker $crt $name ");
-		$function->($xml_file);
+# print "$crt_worker try pid.\n";
+		Common::my_print_prepand("$crt_worker $crt/$shared_data{$crt_worker}{'threads'} $name ");
+		$knot->shlock;
+		$shared_data{$crt_worker}{'running'}{$DataElement} = 1;
+		$shared_data{'nr_processes'}++;
+		$knot->shunlock;
+		$function->($DataElement);
+# 		$knot->shlock;
+# 		$shared_data{$crt_worker}{$DataElement} = 1;
+# 		$knot->shunlock;
 		exit (0);
 	    }
-	    die "Seems we want to add the same process twice.\n" if defined $running->{$pid};
+# $knot->shunlock;
+# print "$crt_worker try go.\n";
+	    print "$crt_worker ($pid) $name started.\n" if $pid > 0;
 	    $running->{$pid}->{'thread_nr'} = $crt;
-	    $running->{$pid}->{'xml_file'} = $xml_file;
+	    $running->{$pid}->{'xml_file'} = $DataElement;
 	    $running->{$pid}->{'name'} = $name;
-	    update_proc($dbh, "UPDATE $table_info_name set single_mode=NULL where single_mode=".$dbh->quote($xml_file."/$crt_worker")) if $crt_worker ne "clean";
-	    update_proc($dbh, "UPDATE $table_work_name set status='working', pid=$pid where status='collected' and worker_name='$crt_worker' and xml_file=".$dbh->quote($xml_file));
-	    update_proc($dbh, "UPDATE $table_info_name set $crt_worker\_running=".(scalar keys %$running));
-	    print "\t\t$crt_worker ($pid) $name started.\n" if $pid > 0;
 	} else {
-	    push @queue, $xml_file if defined $xml_file;
+# 	    $knot->shunlock;
+# print "$crt_worker try nok.\n";
+# print Dumper(time,%shared_data) if (time % 3) == 0;
 	}
-
-	my $thread_nr;
+# $knot->shunlock;
+	my $pid;
 	do {
-	    $thread_nr = reap_children($dbh, $running, $crt_worker, $next_worker);
-	    push @thread, $thread_nr if defined $thread_nr;
-	} while (defined $thread_nr);
+	    $pid = waitpid(-1, WNOHANG);
+	    if ($pid > 0) {
+		die "Unknown pid: $pid.\n".Dumper($running) if ! defined $running->{$pid};
+		my $DataElement = $running->{$pid}->{'xml_file'};
+		push @thread, $running->{$pid}->{'thread_nr'};
+		$knot->shlock;
+		$shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker;
+		delete $shared_data{$crt_worker}{'running'}{$DataElement};
+		$shared_data{'nr_processes'}--;
+		$shared_data{'single_mode'} = undef if defined $shared_data{'single_mode'} && $shared_data{'single_mode'} eq $DataElement;
+		$knot->shunlock;
+		print "$crt_worker ($pid) $running->{$pid}->{'name'} reapead.\n";
+		delete $running->{$pid};
+	    }
+	} while ($pid>0);
 	usleep(100000);
-# 	sleep 1;
     }
 
+    my $pid;
     do {
-	my $thread_nr = reap_children($dbh, $running, $crt_worker, $next_worker);
-	push @thread, $thread_nr;
+	$pid = waitpid(-1, WNOHANG);
+	if ($pid > 0) {
+	    die "Unknown pid: $pid.\n".Dumper($running) if ! defined $running->{$pid};
+	    my $DataElement = $running->{$pid}->{'xml_file'};
+	    push @thread, $running->{$pid}->{'thread_nr'};
+	    $knot->shlock;
+	    $shared_data{$next_worker}{'queue'}{$DataElement} = 1 if defined $next_worker;
+	    delete $shared_data{$crt_worker}{'running'}{$DataElement};
+	    $shared_data{'nr_processes'}--;
+	    $shared_data{'single_mode'} = undef if defined $shared_data{'single_mode'} && $shared_data{'single_mode'} eq $DataElement;
+	    $knot->shunlock;
+	    print "$crt_worker ($pid) $running->{$pid}->{'name'} reapead.\n";
+	    delete $running->{$pid};
+	}
 	usleep(100000);
     } while (scalar keys %$running);
 
-    update_proc($dbh, "UPDATE $table_info_name set $next_worker\_done=1") if defined $next_worker;
+    $knot->shlock;
+    $shared_data{$next_worker}{'queue_done'} = 1 if defined $next_worker;
+    $shared_data{'brucealmighty'} = 1 if ! defined $next_worker;
+    $shared_data{$next_worker}{'threads'} += $shared_data{$crt_worker}{'threads'};
+    $knot->shunlock;
     print "($crt_worker). FIN *******************.\n";
 }
 
-sub periodic_checks {
-    my $main_proc = shift;
-    print "Starting checks process.\n";
-    my ($dbh, $sth, $sth_work, $sth_info, $row);
-    $dbh = connect_sqlite($dbh, $path_to_db_file);
-    $sth = $dbh->prepare("SELECT ebook_done FROM $table_info_name");
-    $sth_work = $dbh->prepare("SELECT worker_name, pid, xml_file FROM $table_work_name where pid>0");
-    $sth_info = $dbh->prepare("SELECT libreoffice_running, clean_running, ebook_running, ifnull(single_mode,'none') FROM $table_info_name");
-    my $parents->{$main_proc} = "main";
-    do {
-	my $string = "";
-	$sth_work->execute();
-	while ($row = $sth_work->fetch){
-	    open( STAT , "</proc/@$row[1]/stat" ) or next;
-	    my @stat = split /\s+/ , <STAT>;
-	    close( STAT );
-# 	    my $name = (split /$url_sep/, ((split /\/+/, @$row[2])[-2]))[-1];
-	    my $name = (split /\/+/, @$row[2])[-2];
-	    $string .= "** worker pid = @$row[1], VmSize = ".(sprintf "%.0f", $stat[22]/1024/1024)."MB, VmRSS =".(sprintf "%.0f", $stat[23] * 4/1024)."MB, daddy = $stat[3], name = @$row[0] $name\n";
-	    $parents->{$stat[3]} = @$row[0];
+sub check_for_locks {
+    print "Starting locks check process.\n";
+    my $tries = 1;
+    while (! $shared_data{'brucealmighty'}) {
+	usleep(1000000);
+	if ( $knot->shlock(LOCK_SH|LOCK_NB) ){
+	    $knot->shunlock;
+	    $tries = 1;
+	} else {
+	    print "********* LOCKS ($tries):\n".Dumper(%shared_data)."*******************\n" if $tries % 60 == 0;
+	    $tries++;
 	}
-	my @all_procs = grep /PPid:\s+$main_proc/, `grep PPid /proc/*/status`;
-	foreach my $pid (@all_procs, $main_proc){
-	    $pid =~ s/(\/status:PPid:.+\n$)|(^\/proc\/)//g;
-	    open( STAT , "</proc/$pid/stat" ) or next;
-	    my @stat = split /\s+/ , <STAT>;
-	    close( STAT );
-	    my $name_real = "";
-	    $name_real = "$parents->{$pid} " if defined $parents->{$pid};
-	    $name_real = "checker " if $pid == $$;
-	    $string .= "** forked pid = $pid, VmSize = ".(sprintf "%.0f", $stat[22]/1024/1024)."MB, VmRSS =".(sprintf "%.0f", $stat[23] * 4/1024)."MB, daddy = $stat[3], name = $name_real$stat[1]\n";
-	}
-	$sth_info->execute();
-	while ($row = $sth_info->fetch){
-	    $string .= "** LO_procs = @$row[0], clean_procs = @$row[1], ebook_procs = @$row[2]\n** single_mode = @$row[3]\n";
-	}
-	sleep 1;
-	$sth->execute();
-print "**************************************************
-$string**************************************************\n";
-    } while (! @{$sth->fetch}[0]);
-    print "(checks). FIN *******************.\n";
+    }
+    print "(locks). FIN *******************.\n";
 }
 
 sub main_process_worker {
     print "starting main thread\n";
-    my $main_pid = $$;
-    my ($dbh, $sth);
-    $dbh = connect_sqlite($dbh, $path_to_db_file);
-    eval { $sth = $dbh->selectall_arrayref( "SELECT 1 from $table_work_name;");};
-    $dbh->do("DROP TABLE $table_work_name;") if defined $sth;
-    eval { $sth = $dbh->selectall_arrayref( "SELECT 1 from $table_info_name;");};
-    $dbh->do("DROP TABLE $table_info_name;") if defined $sth;
-    $dbh->do("CREATE TABLE $table_work_name ($table_work_def);");
-    $dbh->do("CREATE TABLE $table_info_name ($table_info_def);");
-    do { eval{$dbh->selectall_arrayref( "SELECT * FROM work")}} until (! $@);
-# LIBREOFFICE CLEAN EBOOK LIBREOFFICE_RUNNING CLEAN_RUNNING EBOOK_RUNNING LIBREOFFICE_DONE CLEAN_DONE EBOOK_DONE SINGLE_MODE
-    $dbh->do( "INSERT INTO $table_info_name VALUES (1, 6, 3, 0, 0, 0, 0, 0, 0, NULL)");
-
-    my ($forks, $pid);
+    my $forks;
+    my $pid;
+    $pid = fork();
+    if (!$pid) {check_for_locks; exit 0;};
+    $forks->{$pid} = "locks";
     $pid = fork();
     if (!$pid) {focker_launcher(\&libreoffice_to_html, "libreoffice", "clean"); exit 0;};
-    $forks->{$pid} = "libreoffice";
+    $forks->{$pid} = "html";
     $pid = fork();
-    if (!$pid) {focker_launcher(\&libreoffice_html_clean, "clean", "ebook"); exit 0;};
+    if (!$pid) {focker_launcher(\&libreoffice_html_clean, "clean", "epub"); exit 0;};
     $forks->{$pid} = "clean";
     $pid = fork();
-    if (!$pid) {focker_launcher(\&libreoffice_html_to_epub, "ebook"); exit 0;};
+    if (!$pid) {focker_launcher(\&libreoffice_html_to_epub, "epub", undef); exit 0;};
     $forks->{$pid} = "epub";
-    $pid = fork();
-    if (!$pid) {periodic_checks($main_pid); exit 0;};
-    $forks->{$pid} = "checks";
-    print Dumper($forks);
-
+print Dumper($forks);
     my $files_to_import = synchronize_files;
     my $crt = 1;
     foreach my $file (sort keys %$files_to_import) {
@@ -745,7 +726,9 @@ sub main_process_worker {
 	my $xml_file = "$files_to_import->{$file}->{'workingdir'}/$control_file";
 	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) {
 	    Common::hash_to_xmlfile($files_to_import->{$file}, $xml_file);
-	    $dbh->do( "INSERT INTO $table_work_name VALUES (".$dbh->quote($xml_file).", 'libreoffice', 'start', 0)");
+	    $knot->shlock;
+	    $shared_data{'libreoffice'}{'queue'}{$xml_file} = 1;
+	    $knot->shunlock;
 	} elsif ($type =~ m/\.pdf$/i) {
 	} elsif ($type =~ m/\.epub$/i) {
 	} else {
@@ -754,9 +737,9 @@ sub main_process_worker {
 	$crt++;
 # last if $crt>10;
     }
-    update_proc($dbh, "UPDATE $table_info_name set libreoffice_done=1");
-#     my $res = $dbh->do( "UPDATE $table_info_name set libreoffice_done=1");
-#     print "=================== NOOOOOOOOOO done libreoffice =========\n" if ! $res;
+    $knot->shlock;
+    $shared_data{'libreoffice'}{'queue_done'} = 1;
+    $knot->shunlock;
     while (scalar keys %$forks) {
 	$pid = waitpid(-1, WNOHANG);
 	if ($pid > 0) {
@@ -776,7 +759,7 @@ if ($workign_mode eq "-ri") {
 } elsif ($workign_mode eq "-epub") {
     main_process_worker();
 }
-
+IPC::Shareable->clean_up_all;
 #######   epub to big html
 #~/programe/calibre/ebook-convert Odiseea\ marţiană\ -\ maeştrii\ anticipaţiei\ clasice.epub Odiseea\ marţiană\ -\ maeştrii\ anticipaţiei\ clasice.htmlz
 #######   run macro on doc
