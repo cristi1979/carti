@@ -48,7 +48,8 @@ our $duplicate_files = {};
 my $duplicate_file = "$script_dir/duplicate_files";
 
 my $control_file = "doc_info_file.xml";
-my $work_prefix = "/media/carti/work";
+# my $work_prefix = "/media/carti/work";
+my $work_prefix = "/media/ceva2/downloads/work";
 # my $work_prefix = "./work";
 $work_prefix = abs_path($work_prefix);
 Common::makedir($work_prefix);
