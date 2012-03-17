@@ -48,8 +48,8 @@ our $duplicate_files = {};
 my $duplicate_file = "$script_dir/duplicate_files";
 
 my $control_file = "doc_info_file.xml";
-# my $work_prefix = "/media/carti/work";
-my $work_prefix = "./work";
+my $work_prefix = "/media/carti/work";
+# my $work_prefix = "./work";
 $work_prefix = abs_path($work_prefix);
 Common::makedir($work_prefix);
 my $path_to_db_file = "/dev/shm/sqlitedb.sqlite";
@@ -641,7 +641,7 @@ sub focker_launcher {
 	    update_proc($dbh, "UPDATE $table_info_name set single_mode=NULL where single_mode=".$dbh->quote($xml_file."/$crt_worker")) if $crt_worker ne "clean";
 	    update_proc($dbh, "UPDATE $table_work_name set status='working', pid=$pid where status='collected' and worker_name='$crt_worker' and xml_file=".$dbh->quote($xml_file));
 	    update_proc($dbh, "UPDATE $table_info_name set $crt_worker\_running=".(scalar keys %$running));
-	    print "\t\t$crt_worker ($pid) $name started.\n" if $pid > 0;
+	    print "\t\t$crt_worker ($pid) $name started (out of ".(scalar @queue).").\n" if $pid > 0;
 	} else {
 	    push @queue, $xml_file if defined $xml_file;
 	}
@@ -662,7 +662,8 @@ sub focker_launcher {
     } while (scalar keys %$running);
 
     if (defined $next_worker) {
-	update_proc($dbh, "UPDATE $table_info_name set $next_worker\_done=1");
+# 	update_proc($dbh, "UPDATE $table_info_name set $crt_worker=$next_worker+$crt_worker");
+	update_proc($dbh, "UPDATE $table_info_name set $next_worker=$next_worker+$crt_worker, $next_worker\_done=1");
     } else {
 	update_proc($dbh, "UPDATE $table_info_name set ALL_DONE=1");
     }
@@ -677,7 +678,7 @@ sub periodic_checks {
     $dbh = connect_sqlite($dbh, $path_to_db_file);
     $sth = $dbh->prepare("SELECT ALL_DONE FROM $table_info_name");
     $sth_work = $dbh->prepare("SELECT worker_name, pid, xml_file FROM $table_work_name where pid>0");
-    $sth_info = $dbh->prepare("SELECT libreoffice_running, clean_running, ebook_running, ifnull(single_mode,'none') FROM $table_info_name");
+    $sth_info = $dbh->prepare("SELECT libreoffice, clean, ebook, libreoffice_running, clean_running, ebook_running, ifnull(single_mode,'none') FROM $table_info_name");
     my $parents->{$main_proc} = "main";
     do {
 	my $string = "";
@@ -689,6 +690,13 @@ sub periodic_checks {
 # 	    my $name = (split /$url_sep/, ((split /\/+/, @$row[2])[-2]))[-1];
 	    my $name = (split /\/+/, @$row[2])[-2];
 	    $string .= "** worker pid = @$row[1], VmSize = ".(sprintf "%.0f", $stat[22]/1024/1024)."MB, VmRSS =".(sprintf "%.0f", $stat[23] * 4/1024)."MB, daddy = $stat[3], name = @$row[0] $name\n";
+
+# if (@$row[0] eq "ebook"){
+# 	    open( STAT , "</proc/*/stat" ) or next;
+# 	    my @stat = split /\s+/ , <STAT>;
+# 	    close( STAT );
+# }
+
 	    $parents->{$stat[3]} = @$row[0];
 	}
 	my @all_procs = grep /PPid:\s+$main_proc/, `grep PPid /proc/*/status`;
@@ -704,12 +712,11 @@ sub periodic_checks {
 	}
 	$sth_info->execute();
 	while ($row = $sth_info->fetch){
-	    $string .= "** LO_procs = @$row[0], clean_procs = @$row[1], ebook_procs = @$row[2]\n** single_mode = @$row[3]\n";
+	    $string .= "** LO_procs = @$row[3] (@$row[0]), clean_procs = @$row[4] (@$row[1]), ebook_procs = @$row[5] (@$row[2])\n** single_mode = @$row[6]\n";
 	}
 	sleep 1;
 	$sth->execute();
-	print "**************************************************
-	$string**************************************************\n";
+	print "**************************************************\n$string**************************************************\n";
     } while (! @{$sth->fetch}[0]);
     print "(checks). FIN *******************.\n";
 }
