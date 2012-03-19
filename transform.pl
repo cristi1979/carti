@@ -691,12 +691,6 @@ sub periodic_checks {
 	    my $name = (split /\/+/, @$row[2])[-2];
 	    $string .= "** worker pid = @$row[1], VmSize = ".(sprintf "%.0f", $stat[22]/1024/1024)."MB, VmRSS =".(sprintf "%.0f", $stat[23] * 4/1024)."MB, daddy = $stat[3], name = @$row[0] $name\n";
 
-# if (@$row[0] eq "ebook"){
-# 	    open( STAT , "</proc/*/stat" ) or next;
-# 	    my @stat = split /\s+/ , <STAT>;
-# 	    close( STAT );
-# }
-
 	    $parents->{$stat[3]} = @$row[0];
 	}
 	my @all_procs = grep /PPid:\s+$main_proc/, `grep PPid /proc/*/status`;
