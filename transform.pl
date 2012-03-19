@@ -260,7 +260,7 @@ sub get_documents {
 # 	    move("$dir/$name$suffix", "$dir/$tmp1$tmp2") || die "can't move file $name$suffix.\n";
 my $q = "$dir/$tmp1$tmp2";
 $q =~ s/\x{c5}\x{a3}/\x{c8}\x{9b}/ig;
-move("$dir/$name$suffix", $q) || die "can't move file $name$suffix.\n";
+move("$dir/$name$suffix", $q) || die "can't move file $dir/$name$suffix.\n";
 	    $file = "$dir/$tmp1$tmp2";
 	    $name = $tmp1;
 	    $suffix = $tmp2;
