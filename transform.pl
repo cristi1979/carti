@@ -40,7 +40,8 @@ my $extra_tools_dir = "$script_dir/tools";
 
 my $workign_mode = shift;
 # my $docs_prefix = shift;
-my $docs_prefix = "/media/carti/aaa_aaa/";
+# my $docs_prefix = "/media/carti/aaa_aaa/";
+my $docs_prefix = "/media/ceva1/Audio/Carti/aaa_aaa/";
 $docs_prefix = abs_path($docs_prefix);
 
 my $good_files_dir = "$docs_prefix/aaa_aaa/";
@@ -50,8 +51,8 @@ our $duplicate_files = {};
 my $duplicate_file = "$script_dir/duplicate_files";
 
 my $control_file = "doc_info_file.xml";
-my $work_prefix = "/media/carti/work";
-# my $work_prefix = "/media/ceva2/downloads/work";
+# my $work_prefix = "/media/carti/work";
+my $work_prefix = "/media/ceva2/downloads/work";
 # my $work_prefix = "./work";
 $work_prefix = abs_path($work_prefix);
 Common::makedir($work_prefix);
@@ -253,11 +254,13 @@ die "_$file\_\n";
 	    my $tmp1 = $name;
 	    $tmp1 =~ s/(^\s+|\s+$)//i;
 	    $tmp1 =~ s/\s+/ /ig;
-	    $tmp1 =~ s/\x{c5}\x{a3}/\x{c8}\x{9b}/ig;
 	    my $tmp2 = $suffix;
 	    $tmp2 = lc($suffix);
 	    print "\"$name$suffix\" ==> \"$tmp1$tmp2\"\n";
-	    move("$dir/$name$suffix", "$dir/$tmp1$tmp2") || die "can't move file $name$suffix.\n";
+# 	    move("$dir/$name$suffix", "$dir/$tmp1$tmp2") || die "can't move file $name$suffix.\n";
+my $q = "$dir/$tmp1$tmp2";
+$q =~ s/\x{c5}\x{a3}/\x{c8}\x{9b}/ig;
+move("$dir/$name$suffix", $q) || die "can't move file $name$suffix.\n";
 	    $file = "$dir/$tmp1$tmp2";
 	    $name = $tmp1;
 	    $suffix = $tmp2;
