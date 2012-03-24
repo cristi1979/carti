@@ -40,8 +40,9 @@ my $extra_tools_dir = "$script_dir/tools";
 
 my $workign_mode = shift;
 # my $docs_prefix = shift;
-# my $docs_prefix = "/media/carti/aaa_aaa/";
-my $docs_prefix = "/media/ceva1/Audio/Carti/aaa_aaa/";
+my $docs_prefix = "/media/carti/aaa_aaa/";
+# my $docs_prefix = "/media/ceva1/Audio/Carti/aaa_aaa/";
+# my $docs_prefix = "/media/wiki_rem/media/share/Documentation/cfalcas/q/carti/www";
 $docs_prefix = abs_path($docs_prefix);
 
 my $good_files_dir = "$docs_prefix/aaa_aaa/";
@@ -51,14 +52,16 @@ our $duplicate_files = {};
 my $duplicate_file = "$script_dir/duplicate_files";
 
 my $control_file = "doc_info_file.xml";
-# my $work_prefix = "/media/carti/work";
-my $work_prefix = "/media/ceva2/downloads/work";
+my $work_prefix = "/media/carti/work";
+# my $work_prefix = "/media/ceva2/downloads/work";
 # my $work_prefix = "./work";
 $work_prefix = abs_path($work_prefix);
 Common::makedir($work_prefix);
 my $path_to_db_file = "/dev/shm/sqlitedb.sqlite";
 
 my $debug = 1;
+my $retry_on_fail = 0;
+my $extract_cover = 0;
 my $url_sep = " -- ";
 my $font = "BookmanOS.ttf";
 my $Xdisplay = ":12345";
@@ -145,7 +148,7 @@ sub get_authors {
 sub get_version {
     my $file = shift;
     my $ver;
-    $ver = $2 if ($file =~ m/(\s\[([0-9]+(\.[0-9]+))\])$/i);
+    $ver = $2 if ($file =~ m/(\s\[([0-9]+(\.[0-9]+)+)\])$/i);
     $file =~ s/\s\[$ver\]// if defined $ver;
     return ($ver, $file);
 }
@@ -238,34 +241,29 @@ sub get_documents {
     sub add_document {
 	my $file = shift;
 
-# print "|\x{c4}\x{83}|\x{c5}\x{9e}|\x{c5}\x{9f}|\x{c3}\x{a2}|\x{c3}\x{ae}|\x{c3}\x{a8}|\x{c3}\x{a9}|\x{c3}\x{a4}|\x{c8}\x{9b}|\x{c8}\x{99}|\x{c5}\x{a2}|\x{c3}\x{8e}|\x{c3}\x{a5}|\x{c3}\x{85}|\x{c3}\x{bc}|\x{e2}\x{82}\x{ac}|\x{e2}\x{80}\x{99}|\x{c3}\x{a1}|\x{c3}\x{ba}|\x{c5}\x{a1}|\x{c5}\x{a0}|\x{c3}\x{a0}|\n";exit 1;
-# |\x{c3}\x{ae}
-# if ($file !~ m/^([&a-z\.\/_ \-0-9\(\)\[\],:'!"\?@;]|\x{c4}\x{83}|\x{c5}\x{9e}|\x{c5}\x{9f}|\x{c3}\x{a2}|\x{c3}\x{a8}|\x{c3}\x{a9}|\x{c3}\x{a4}|\x{c8}\x{9b}|\x{c8}\x{99}|\x{c5}\x{a2}|\x{c3}\x{8e}|\x{c3}\x{a5}|\x{c3}\x{85}|\x{c3}\x{bc}|\x{e2}\x{82}\x{ac}|\x{e2}\x{80}\x{99}|\x{c3}\x{a1}|\x{c3}\x{ba}|\x{c5}\x{a1}|\x{c5}\x{a0}|\x{c3}\x{a0})+$/i){
-# print "$file\n";
-# $file=~ s/[&a-z\.\/_ \-0-9\(\)\[\],:'!"\?@;]|\x{c4}\x{83}|\x{c5}\x{9e}|\x{c5}\x{9f}|\x{c3}\x{a2}|\x{c3}\x{a8}|\x{c3}\x{a9}|\x{c3}\x{a4}|\x{c8}\x{9b}|\x{c8}\x{99}|\x{c5}\x{a2}|\x{c3}\x{8e}|\x{c3}\x{a5}|\x{c3}\x{85}|\x{c3}\x{bc}|\x{e2}\x{82}\x{ac}|\x{e2}\x{80}\x{99}|\x{c3}\x{a1}|\x{c3}\x{ba}|\x{c5}\x{a1}|\x{c5}\x{a0}|\x{c3}\x{a0}//gi;
-# die "_$file\_\n";
-# };
+if ($file !~ m/^([&a-z\.\/_ \-0-9\(\)\[\],:'!"\?@;]|\x{c4}\x{83}|\x{c5}\x{9e}|\x{c5}\x{9f}|\x{c3}\x{a2}|\x{c3}\x{a8}|\x{c3}\x{a9}|\x{c3}\x{a4}|\x{c8}\x{9b}|\x{c8}\x{99}|\x{c5}\x{a2}|\x{c3}\x{8e}|\x{c3}\x{a5}|\x{c3}\x{85}|\x{c3}\x{bc}|\x{e2}\x{82}\x{ac}|\x{e2}\x{80}\x{99}|\x{c3}\x{a1}|\x{c3}\x{ba}|\x{c5}\x{a1}|\x{c5}\x{a0}|\x{c3}\x{a0}|\x{c3}\x{ae}|\x{e2}\x{80}\x{a6})+$/i){
+print "$file\n";
+$file=~ s/[&a-z\.\/_ \-0-9\(\)\[\],:'!"\?@;]|\x{c4}\x{83}|\x{c5}\x{9e}|\x{c5}\x{9f}|\x{c3}\x{a2}|\x{c3}\x{a8}|\x{c3}\x{a9}|\x{c3}\x{a4}|\x{c8}\x{9b}|\x{c8}\x{99}|\x{c5}\x{a2}|\x{c3}\x{8e}|\x{c3}\x{a5}|\x{c3}\x{85}|\x{c3}\x{bc}|\x{e2}\x{82}\x{ac}|\x{e2}\x{80}\x{99}|\x{c3}\x{a1}|\x{c3}\x{ba}|\x{c5}\x{a1}|\x{c5}\x{a0}|\x{c3}\x{a0}|\x{c3}\x{ae}|\x{e2}\x{80}\x{a6}//gi;
+die "\nERROR WWW\n_$file\_\n";
+};
 
 	print "$count\r" if ++$count % 10 == 0;
 	$file = abs_path($file);
 	my ($name, $dir, $suffix) = fileparse($file, qr/\.[^.]*/);
 	die "$dir\n" if $dir =~ m/(^\s+|\s+$|\s{2,})/g;
-	if ($name =~ m/(^\s+|\s+$|\s{2,}|\x{c5}\x{a3})/ || $suffix ne lc($suffix)){
+	if ($name =~ m/(^\s+|\s+$|\s{2,})/ || $suffix ne lc($suffix)){
 	    my $tmp1 = $name;
 	    $tmp1 =~ s/(^\s+|\s+$)//i;
 	    $tmp1 =~ s/\s+/ /ig;
 	    my $tmp2 = $suffix;
 	    $tmp2 = lc($suffix);
 	    print "\"$name$suffix\" ==> \"$tmp1$tmp2\"\n";
-# 	    move("$dir/$name$suffix", "$dir/$tmp1$tmp2") || die "can't move file $name$suffix.\n";
-my $q = "$dir/$tmp1$tmp2";
-$q =~ s/\x{c5}\x{a3}/\x{c8}\x{9b}/ig;
-move("$dir/$name$suffix", $q) || die "can't move file $dir/$name$suffix.\n";
+	    move("$dir/$name$suffix", "$dir/$tmp1$tmp2") || die "can't move file $name$suffix.\n";
 	    $file = "$dir/$tmp1$tmp2";
 	    $name = $tmp1;
 	    $suffix = $tmp2;
 	}
-	return if $suffix =~ m/^\.jpe?g$/i;
+	return if $suffix =~ m/^\.jpg$/i;
 	my $file_no_path = $file; $file_no_path =~ s/^$docs_prefix\/*//;
 	my $book->{'doc_file'} = $file_no_path;
 	$book->{'name'} = $name;
@@ -283,27 +281,26 @@ move("$dir/$name$suffix", $q) || die "can't move file $dir/$name$suffix.\n";
 	($ver, $name) = get_version($name);
 	($series, $series_no, $name) = get_series($name);
 	$book->{'xml_version'} = 1;
-	$book->{'filesize'} = -s "$file";
-	$book->{'filedate'} = stat($file)->mtime;
-	$book->{'type'} = "$suffix";
-	$book->{'coperta'} = $coperta || undef;
-	$book->{'title'} = "$name";
-	$book->{'md5'} = (defined $book &&
-	      $book->{'filesize'} eq $book->{'filesize'} &&
-	      $book->{'filedate'} eq $book->{'filedate'})
-		    ? $book->{'md5'} : Common::get_file_md5("$file");
+	$book->{'coperta'} = $coperta || 0;
+	$book->{'title'} = $name;
 	$book->{'auth'} = $auth;
-	$book->{'ver'} = $ver;
-	$book->{'seria'} = $series;
-	$book->{'seria_no'} = $series_no;
+	$book->{'ver'} = $ver || 0;
+	$book->{'seria'} = $series || 0;
+	$book->{'seria_no'} = $series_no || 0;
+	$book->{'scurte'} = 0;
+	$book->{'medii'} = 0;
+	$book->{'lungi'} = 0;
 
 	my $fixed_file = "$auth$url_sep$name/$name";
 	$fixed_file =~ s/[:,"]//g;
 	$fixed_file = Common::normalize_text($fixed_file);
 	my ($name_x,$dir_x,$suffix_x) = fileparse($fixed_file, qr/\.[^.]*/);
-	$book->{'safe_name'} = "$name_x";
-	$book->{'workingdir'} = "$dir_x";
-	$book->{'doc_filename_fixed'} = "$name_x$suffix";
+	$book->{'file_info'}->{'safe_name'} = $name_x;
+	$book->{'file_info'}->{'workingdir'} = $dir_x;
+	$book->{'file_info'}->{'doc_filename_fixed'} = "$name_x$suffix";
+	$book->{'file_info'}->{'filesize'} = -s $file;
+	$book->{'file_info'}->{'type'} = $suffix;
+	$book->{'file_info'}->{'filedate'} = stat($file)->mtime;
 	$book->{'result'}->{'libreoffice'} = "";
 	$book->{'result'}->{'html_clean'} = "";
 	$book->{'result'}->{'epub_normal'} = "";
@@ -318,21 +315,29 @@ move("$dir/$name$suffix", $q) || die "can't move file $dir/$name$suffix.\n";
 	$book->{'out'}->{'epub_font_included'} = "$dir_x/$name_x\_internal.epub";
 	$book->{'out'}->{'epub_font_external'} = "$dir_x/$name_x\_external.epub";
 	$book->{'out'}->{'mobi'} = "$dir_x/$name_x.mobi";
-# print Dumper($book);
+
 	my $key = $dir_x;
 	$key =~ s/\///g;;
 	die "Book already exists: $key ($file)\n".Dumper($files_to_import->{$key}) if defined $files_to_import->{$key};
 	if (defined $files_already_imported->{$key}) {
-	    foreach (keys %{$files_already_imported->{$key}}){
-		## update only what we have defined. Else is deprecated
-		$book->{$_} = $files_already_imported->{$key}->{$_} if defined $book->{$_};
+	    my $book_from_file = Common::xmlfile_to_hash($files_already_imported->{$key});
+	    if ($book->{'file_info'}->{'filesize'} eq $book_from_file->{'file_info'}->{'filesize'} &&
+		    $book->{'file_info'}->{'filedate'} eq $book_from_file->{'file_info'}->{'filedate'}) {
+		$book->{'file_info'}->{'md5'} = $book_from_file->{'file_info'}->{'md5'};
+		$book->{'result'} = $book_from_file->{'result'};
+	    } else {
+		print "Delete deprecated dir: $book->{'file_info'}->{'workingdir'}.\n";
+		remove_tree($book->{'file_info'}->{'workingdir'});
+		$book->{'file_info'}->{'md5'} = Common::get_file_md5("$file");
 	    }
+	} else {
+	    $book->{'file_info'}->{'md5'} = Common::get_file_md5("$file");
 	}
-# print Dumper($book);exit 1;
 	$files_to_import->{$key} = $book;
     }
     print "Get all files.\n";
     find ({wanted => sub { add_document ($File::Find::name) if -f },},"$docs_prefix") if -d "$docs_prefix";
+    print "Got all files: $count.\n";
     return $files_to_import;
 }
 
@@ -352,27 +357,40 @@ sub get_existing_documents {
 	    next;
 	}
 	print "$count\r" if ++$count % 10 == 0;
-	$files_already_imported->{$dir} = Common::xmlfile_to_hash("$work_prefix/$dir/$control_file");
+# 	$files_already_imported->{$dir} = Common::xmlfile_to_hash("$work_prefix/$dir/$control_file");
+	$files_already_imported->{$dir} = "$work_prefix/$dir/$control_file";
     }
 # print Dumper($files_already_imported);exit 1;
+    print "Got already done files from $work_prefix: $count.\n";
     return $files_already_imported;
 }
-get_documents;exit 1;
+
 sub synchronize_files {
-#     my $files_already_imported = get_existing_documents;
-    my $files_to_import = get_documents(get_existing_documents());
+    my $files_already_imported = get_existing_documents;
+    my $files_to_import = get_documents($files_already_imported);
+# my $q=0;
+# foreach (sort keys %$files_already_imported){
+# print Dumper($files_already_imported->{$_});
+# last if $q++>1;
+# }
+# $q=0;
+# foreach (sort keys %$files_to_import){
+# print Dumper($files_to_import->{$_});
+# last if $q++>1;
+# }
+# exit 1;
     print "\tDone.\n";
-#     my @arr1 = (keys %$files_already_imported);
-#     my @arr2 = (keys %$files_to_import);
-#     my ($only_in1, $only_in2, $common) = Common::array_diff(\@arr1, \@arr2);
+    my @arr1 = (keys %$files_already_imported);
+    my @arr2 = (keys %$files_to_import);
+    my ($only_in1, $only_in2, $common) = Common::array_diff(\@arr1, \@arr2);
 #     ## should delete $only_in1
-#     remove_tree("$work_prefix/$_") foreach (@$only_in1);
+    remove_tree("$work_prefix/$_") foreach (@$only_in1);
     return $files_to_import;
 }
 
 sub convert_images {
     my ($images, $work_dir) = @_;
-    my $cover = ();
+    my $cover = "";
     foreach my $key (sort keys %$images) {
 	my $orig_name = $key;
 	my $new_name = $images->{$key}->{'name'};
@@ -386,37 +404,45 @@ sub convert_images {
 	$cover = "$work_dir/$new_name" if $images->{$key}->{'nr'} == 0;
 	unlink "$work_dir/$orig_name";
     }
-    return $cover;
+    return $extract_cover?$cover:"";
 }
+
 
 sub libreoffice_to_html {
     my $xml_book = shift;
     my $book = Common::xmlfile_to_hash($xml_book);
-    my ($work_dir, $title, $html_file) =("$work_prefix/$book->{'workingdir'}", $book->{'title'}, "$work_prefix/$book->{'out'}->{'html_file'}");
+    my ($work_dir, $title, $html_file) =("$work_prefix/$book->{'file_info'}->{'workingdir'}", $book->{'title'}, "$work_prefix/$book->{'out'}->{'html_file'}");
 
-    my $working_file = "$work_dir/$book->{'doc_filename_fixed'}";
+    my $working_file = "$work_dir/$book->{'file_info'}->{'doc_filename_fixed'}";
     eval{
-    if (! $book->{'result'}->{'libreoffice'}) {
+    if ! (($book->{'result'}->{'libreoffice'} eq "failed" && !$retry_on_fail) ||
+	  ($book->{'result'}->{'libreoffice'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_orig'}")) {
+	$book->{'result'}->{'libreoffice'} = "failed";
 	Common::my_print "Doing the doc to html conversion for $title.\n";
 	Common::makedir($work_dir);
 	copy("$docs_prefix/$book->{'doc_file'}", $working_file) or die "Copy failed \n\$docs_prefix/$book->{'doc_file'}\n\t$working_file:\n$!\n";
 	my $res = doc_to_html_macro($working_file);
 	die "Can't generate html $html_file.\n" if ($res || ! -s $html_file);
 	move($html_file, "$work_prefix/$book->{'out'}->{'html_file_orig'}") || die "can't move file $html_file.\n";
-	my $zip_file = "$work_dir/$title.zip";
-	Common::add_file_to_zip($zip_file, $working_file);
+	my $zip_file = "$work_dir/$book->{'file_info'}->{'safe_name'}.zip";
+	Common::add_file_to_zip($zip_file, "$docs_prefix/$book->{'doc_file'}");
+# use IO::Compress::Zip qw(:all);
+# zip [ $working_file ] => $zip_file or die "Cannot create zip file: $ZipError" ;
+# 	system("zip", "-j", "$zip_file", "$docs_prefix/$book->{'doc_file'}") == 0 or die "creating zip file failed ($?): $!.\n";
+die "SPARTAAAA!!!!\n" if ! -f $zip_file;
 	unlink $working_file || die "Can't remove file $working_file: $!\n";
 	$book->{'result'}->{'libreoffice'} = "done";
-	Common::hash_to_xmlfile($book, "$xml_book");
     }};
-    print "XXXX ERROR\n".Dumper($title, $@). "error: $?.\n" if ($@);
+    Common::hash_to_xmlfile($book, "$xml_book");
+    print "XXXX LO ERROR\n".Dumper($title, $@). "error: $?.\n" if ($@);
+    return ($@)?1:0;
 }
 
 sub libreoffice_html_clean {
     my $xml_book = shift;
     my $book = Common::xmlfile_to_hash($xml_book);
-    my ($work_dir, $title, $html_file_orig) =("$work_prefix/$book->{'workingdir'}", $book->{'title'}, "$work_prefix/$book->{'out'}->{'html_file_orig'}");
-    my $file_max_size_single_thread = 10000000;
+    my ($work_dir, $title, $html_file_orig) =("$work_prefix/$book->{'file_info'}->{'workingdir'}", $book->{'title'}, "$work_prefix/$book->{'out'}->{'html_file_orig'}");
+    my $file_max_size_single_thread = 30000000;
     my $dbh;$dbh = connect_sqlite($dbh, $path_to_db_file);
     my $sth = $dbh->prepare( "select libreoffice_running+clean_running+ebook_running from $table_info_name");
     if (-f $html_file_orig && -s $html_file_orig > $file_max_size_single_thread) {
@@ -427,8 +453,10 @@ sub libreoffice_html_clean {
 	update_proc($dbh, "UPDATE $table_info_name set single_mode=NULL where single_mode=".$dbh->quote($xml_book."/clean"));
     }
 
-    eval {
-    if (! $book->{'result'}->{'html_clean'}) {
+    eval{
+    if ! (($book->{'result'}->{'html_clean'} eq "failed" && !$retry_on_fail) ||
+	  ($book->{'result'}->{'html_clean'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_clean'}")) {
+	$book->{'result'}->{'html_clean'} = "failed";
 	Common::my_print "Doing the html cleanup for $title.\n";
 	my ($html, $images) = HtmlClean::clean_html_from_oo(Common::read_file($html_file_orig), $title, $work_dir);
 	my $cover = convert_images ($images, $work_dir);
@@ -436,26 +464,29 @@ sub libreoffice_html_clean {
 	$book->{'scurte'} = 1 if (length($html) <= 35000);
 	$book->{'medii'} = 1 if (length($html) >= 30000 && length($html) <= 450000);
 	$book->{'lungi'} = 1 if (length($html) >= 400000);
-	if (! defined $book->{'coperta'} && defined $cover){
-	    $book->{'coperta'} = $cover;
-	    my ($name_b,$dir_b,$suffix_b) = fileparse("$docs_prefix/$book->{'doc_file'}", qr/\.[^.]*/);
+	if (! $book->{'coperta'} && defined $cover){
+	    my ($name_b,$dir_b,$suffix_b) = fileparse(decode_utf8("$docs_prefix/$book->{'doc_file'}"), qr/\.[^.]*/);
 	    my ($name_c,$dir_c,$suffix_c) = fileparse($cover, qr/\.[^.]*/);
 	    copy("$cover", "$dir_b/$name_b$suffix_c") or die "Copy cover failed \n\t$cover\n\t$dir_b/$name_b$suffix_c:\n$!\n";
+	    $book->{'coperta'} = "$dir_b/$name_b$suffix_c";
 	}
 	unlink "$html_file_orig" || die "Can't remove file $html_file_orig: $!\n";
 	$book->{'result'}->{'html_clean'} = "done";
-	Common::hash_to_xmlfile($book, $xml_book);
     }};
-    print Dumper($title, $@). "error: $?.\n" if ($@);
+    Common::hash_to_xmlfile($book, "$xml_book");
+    print "YYYY clean ERROR\n".Dumper($title, $@). "error: $?.\n" if ($@);
+    return ($@)?1:0;
 }
 
 sub libreoffice_html_to_epub {
     my $xml_book = shift;
     my $book = Common::xmlfile_to_hash($xml_book);
-    my ($work_dir, $title, $html_file_clean) = ("$work_prefix/$book->{'workingdir'}", $book->{'title'}, "$work_prefix/$book->{'out'}->{'html_file_clean'}");
+    my ($work_dir, $title, $html_file_clean) = ("$work_prefix/$book->{'file_info'}->{'workingdir'}", $book->{'title'}, "$work_prefix/$book->{'out'}->{'html_file_clean'}");
 
-    eval {
-    if (! $book->{'result'}->{'ebook'}) {
+    eval{
+    if ! (($book->{'result'}->{'ebook'} eq "failed" && !$retry_on_fail) ||
+	  ($book->{'result'}->{'ebook'} eq "done" && -s "$work_prefix/$book->{'out'}->{'epub_font_external'}")) {
+	$book->{'result'}->{'ebook'} = "failed";
 	Common::my_print "Doing epubs for $title.\n";
 	opendir(DIR, "$work_dir");
 	my @images = grep(/\.jpg$/,readdir(DIR));
@@ -464,9 +495,10 @@ sub libreoffice_html_to_epub {
 	unlink "$work_dir/$_" foreach (@images);
 	unlink "$html_file_clean" || die "Can't remove file $html_file_clean: $!\n";
 	$book->{'result'}->{'ebook'} = "done";
-	Common::hash_to_xmlfile($book, $xml_book);
     }};
-    print Dumper($title, $@). "error: $?.\n" if ($@);
+    Common::hash_to_xmlfile($book, "$xml_book");
+    print "ZZZZ ebook ERROR\n".Dumper($title, $@). "error: $?.\n" if ($@);
+    return ($@)?1:0;
 }
 
 sub make_ebook {
@@ -474,7 +506,8 @@ sub make_ebook {
     my $in_file = "$work_prefix/$book->{'out'}->{'html_file_clean'}";
     my $out_file = "$work_prefix/$book->{'out'}->{$type}";
     my $cmd = "$epub_command \"$in_file\" \"$out_file\" $epub_parameters";
-    if (! defined $book->{'result'}->{$type} ne "done" || $book->{'result'}->{$type} ne "done"){
+
+    if ($book->{'result'}->{$type} ne "done"){
       Common::my_print "Converting $type start.\n";
       my $output = `$cmd`;
       die "file $out_file not created.\n".Dumper($in_file, $out_file, $output)."CMD:\n$cmd\n\n" if ! -s $out_file;
@@ -485,43 +518,41 @@ sub make_ebook {
 
 sub html_to_epub {
     my ($book, $xml_book) = @_;
-    my ($name, $authors, $dir, $title) = ($book->{'safe_name'}, $book->{'auth'}, "$work_prefix/$book->{'workingdir'}", $book->{'title'});
+    my ($name, $authors, $dir, $title) = ($book->{'file_info'}->{'safe_name'}, $book->{'auth'}, "$work_prefix/$book->{'file_info'}->{'workingdir'}", $book->{'title'});
     my @tags = ();
-    push @tags, "scurte" if defined $book->{'scurte'};
-    push @tags, "medii" if defined $book->{'medii'};
-    push @tags, "lungi" if defined $book->{'lungi'};
-    push @tags, "ver=".$book->{'ver'} if defined $book->{'ver'};
+    push @tags, "scurte" if $book->{'scurte'};
+    push @tags, "medii" if $book->{'medii'};
+    push @tags, "lungi" if $book->{'lungi'};
+    push @tags, "ver=".$book->{'ver'} if $book->{'ver'};
 
-    $title =~ s/\"/\\"/g;
     my $epub_command = "$extra_tools_dir/calibre/ebook-convert";
     my $epub_parameters = "--disable-font-rescaling --minimum-line-height=0 --toc-threshold=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --authors=\"".(decode_utf8($authors))."\" --title=\"".(decode_utf8($title))."\"";
 # --keep-ligatures --rating=between 1 and 5
     $epub_parameters .= " --tags=\"".(join ',', @tags)."\"" if scalar @tags;
-    $epub_parameters .= " --series=\"".(decode_utf8($book->{'seria'}))."\" --series-index=\".$book->{'seria_no'}"."\"" if defined $book->{'seria'} && defined $book->{'seria_no'};
-    if (defined $book->{'coperta'}) {
-	my $cover = $book->{'coperta'};
-	$cover =~ s/\"/\\"/g;
-	$epub_parameters .= " --cover=\"$cover\"";
+    $epub_parameters .= " --series=\"".(decode_utf8($book->{'seria'}))."\" --series-index=\".$book->{'seria_no'}"."\"" if $book->{'seria'} && $book->{'seria_no'};
+    if ($book->{'coperta'}) {
+	my $cover = "$book->{'coperta'}";
+	$epub_parameters .= " --cover=\"".(decode_utf8($cover))."\"";
     }
 
     my $in_file = "$work_prefix/$book->{'out'}->{'html_file_clean'}";
     my ($out_file, $output, $type);
 
     ### normal epub
-    make_ebook($book, "epub_normal", $epub_command,  "$epub_parameters --no-default-epub-cover");
-    Common::hash_to_xmlfile($book, $xml_book);
+#     make_ebook($book, "epub_normal", $epub_command,  "$epub_parameters --no-default-epub-cover");
+#     Common::hash_to_xmlfile($book, $xml_book);
 
     ### epub with external font
     make_ebook($book, "epub_font_external", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"");
     Common::hash_to_xmlfile($book, $xml_book);
 
     ### epub with embedded font
-    make_ebook($book, "epub_font_included", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"");
-    Common::hash_to_xmlfile($book, $xml_book);
+#     make_ebook($book, "epub_font_included", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"");
+#     Common::hash_to_xmlfile($book, $xml_book);
 
     ### normal mobi
-    make_ebook($book, "mobi", $epub_command,  "$epub_parameters");
-    Common::hash_to_xmlfile($book, $xml_book);
+#     make_ebook($book, "mobi", $epub_command,  "$epub_parameters");
+#     Common::hash_to_xmlfile($book, $xml_book);
 }
 
 sub clean_files {
@@ -600,7 +631,12 @@ sub ri_html_to_epub {
 sub update_proc {
     my ($dbh, $txt, $dontcare) = @_;
     my $res = $dbh->do($txt);
-    die "\t\tMortii matii:\n$txt\n" if ! defined $dontcare && $res eq "0E0";
+    if (! defined $dontcare && $res eq "0E0"){
+	die "Mortii matii:\n$txt\n" ;
+	$txt =~ s/UPDATE/SELECT \* /;
+	$txt =~ s/( set .* where )/ where /;
+	print Dumper($dbh->selectall_arrayref("$txt"));
+    }
 # print "$txt\n$res\n" if $res eq "0E0";
     return $res ne "0E0"?1:0;
 }
@@ -610,12 +646,15 @@ sub reap_children {
     my $thread_nr;
     my $pid = waitpid(-1, WNOHANG);
     if ($pid > 0) {
+	my $exit_status = $?;
 	die "Unknown pid: $pid.\n".Dumper($running) if ! defined $running->{$pid};
 	my $xml_file = $running->{$pid}->{'xml_file'};
 	$thread_nr = $running->{$pid}->{'thread_nr'};
 	if (defined $next_worker) {
-	    update_proc($dbh, "UPDATE $table_work_name set worker_name='$next_worker', status='start', PID=0 where status='working' and worker_name='$crt_worker' and xml_file=".$dbh->quote($xml_file));
+	    my $new_status = $exit_status?'failed':'start';
+	    update_proc($dbh, "UPDATE $table_work_name set worker_name='$next_worker', status='$new_status', PID=0 where status='working' and worker_name='$crt_worker' and xml_file=".$dbh->quote($xml_file));
 	} else {
+	    my $new_status = $exit_status?'failed':'done';
 	    update_proc($dbh, "UPDATE $table_work_name set worker_name='$crt_worker', status='done', pid=0 where status='working' and worker_name='$crt_worker' and xml_file=".$dbh->quote($xml_file));
 	}
 	print "\t\t$crt_worker ($pid) $running->{$pid}->{'name'} reapead.\n";
@@ -627,6 +666,8 @@ sub reap_children {
     }
     return undef;
 }
+
+#status: start -> collected (in launcher) -> working (after forked launcher) start (reaper) -> done (last reaper)
 # LIBREOFFICE CLEAN EBOOK LIBREOFFICE_RUNNING CLEAN_RUNNING EBOOK_RUNNING LIBREOFFICE_DONE CLEAN_DONE EBOOK_DONE SINGLE_MODE
 sub focker_launcher {
     my ($function, $crt_worker, $next_worker) = @_;
@@ -655,8 +696,8 @@ sub focker_launcher {
 		die "Can't fork $crt_worker $name.\n";
 	    } elsif($pid==0) {
 		Common::my_print_prepand("\t$crt_worker $crt $name ");
-		$function->($xml_file);
-		exit (0);
+		exit $function->($xml_file);
+# 		exit (0);
 	    }
 	    die "Seems we want to add the same process twice.\n" if defined $running->{$pid};
 	    $running->{$pid}->{'thread_nr'} = $crt;
@@ -722,8 +763,8 @@ sub periodic_checks {
 	    my @stat = split /\s+/ , <STAT>;
 	    close( STAT );
 	    my $name_real = "";
-	    $name_real = "$parents->{$pid} " if defined $parents->{$pid};
-	    $name_real = "checker " if $pid == $$;
+	    $name_real = $parents->{$pid} if defined $parents->{$pid};
+	    $name_real = "checker" if $pid == $$;
 	    $string .= "** forked pid = $pid, VmSize = ".(sprintf "%.0f", $stat[22]/1024/1024)."MB, VmRSS =".(sprintf "%.0f", $stat[23] * 4/1024)."MB, daddy = $stat[3], name = $name_real$stat[1]\n";
 	}
 	$sth_info->execute();
@@ -750,7 +791,7 @@ sub main_process_worker {
     $dbh->do("CREATE TABLE $table_info_name ($table_info_def);");
     do { eval{$dbh->selectall_arrayref( "SELECT * FROM work")}} until (! $@);
 # LIBREOFFICE CLEAN EBOOK LIBREOFFICE_RUNNING CLEAN_RUNNING EBOOK_RUNNING LIBREOFFICE_DONE CLEAN_DONE EBOOK_DONE SINGLE_MODE
-    $dbh->do( "INSERT INTO $table_info_name VALUES (1, 6, 3, 0, 0, 0, 0, 0, 0, 0, NULL)");
+    $dbh->do( "INSERT INTO $table_info_name VALUES (1, 10, 10, 0, 0, 0, 0, 0, 0, 0, NULL)");
 
     my ($forks, $pid);
     $pid = fork();
@@ -770,8 +811,8 @@ sub main_process_worker {
     my $files_to_import = synchronize_files;
     my $crt = 1;
     foreach my $file (sort keys %$files_to_import) {
-	my $type = $files_to_import->{$file}->{'type'};
-	my $xml_file = "$work_prefix/$files_to_import->{$file}->{'workingdir'}/$control_file";
+	my $type = $files_to_import->{$file}->{'file_info'}->{'type'};
+	my $xml_file = "$work_prefix/$files_to_import->{$file}->{'file_info'}->{'workingdir'}/$control_file";
 	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) {
 	    Common::hash_to_xmlfile($files_to_import->{$file}, $xml_file);
 	    $dbh->do( "INSERT INTO $table_work_name VALUES (".$dbh->quote($xml_file).", 'libreoffice', 'start', 0)");
@@ -781,6 +822,7 @@ sub main_process_worker {
 	    print Dumper($files_to_import->{$file})."\nUnknown file type: $type.\n";
 	}
 	$crt++;
+# last if $xml_file =~ m/Navi-Gand-ind/;
 # last if $crt>10;
     }
     update_proc($dbh, "UPDATE $table_info_name set libreoffice_done=1");

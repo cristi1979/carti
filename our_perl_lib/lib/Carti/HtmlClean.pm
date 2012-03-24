@@ -703,6 +703,7 @@ sub clean_html_from_oo {
     $tree = doc_tree_clean_span($tree);
     $tree = doc_tree_remove_empty_span($tree);
     $tree = doc_tree_clean_defs($tree);
+    $tree = doc_tree_clean_body($tree);
     ($tree, $images) = doc_tree_fix_links_from_oo($tree, $no_links);
 #     $tree = doc_tree_clean_h($tree, 0);
     $tree = doc_tree_clean_div($tree);
@@ -711,7 +712,6 @@ sub clean_html_from_oo {
     $tree = doc_tree_remove_empty_list($tree);
     $tree = doc_tree_clean_tables($tree);
     $tree = doc_tree_fix_center($tree);
-    $tree = doc_tree_clean_body($tree);
     $tree = doc_tree_fix_paragraph($tree);
     $tree = doc_tree_fix_a($tree);
     $tree = doc_tree_clean_css_from_oo($tree);

@@ -18,7 +18,7 @@ sub xmlfile_to_hash {
     my $file = shift;
     my $xml = new XML::Simple;
     my $hash;
-    eval{$hash = $xml->XMLin("$file", SuppressEmpty => 1)};
+    eval{$hash = $xml->XMLin("$file")};
     return if $@;
     foreach (keys %$hash){
 	$hash->{$_} = encode_utf8($hash->{$_}) if (defined $hash->{$_} && !ref($hash->{$_}))
@@ -68,16 +68,16 @@ sub add_file_to_zip {
     if (! defined $txt) {
 	my ($name,$dir,$suffix) = fileparse($add_file, qr/\.[^.]*/);
 	$zip->removeMember( "$name$suffix" );
-	$member = $zip->addFile("$add_file", "$name$suffix") or die "Error adding file $name$suffix to zip";
+	$member = $zip->addFile($add_file, "$name$suffix") or die "Error adding file $name$suffix to zip";
     } else {
 	$zip->removeMember( $add_file );
 	$member = $zip->addString($txt, $add_file) or die "Error adding txt $add_file to zip";
     }
     $member->desiredCompressionLevel( 9 );
     if (-f $zip_file){
-	$zip->overwrite()     == AZ_OK or die "write error\n"
+	$zip->overwrite() == AZ_OK or die "write error\n"
     } else {
-	$zip->writeToFileNamed( "$zip_file" ) == AZ_OK or die "write new zip error\n"
+	$zip->writeToFileNamed($zip_file) == AZ_OK or die "write new zip error\n"
     };
 }
 
