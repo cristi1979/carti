@@ -40,9 +40,10 @@ my $extra_tools_dir = "$script_dir/tools";
 
 my $workign_mode = shift;
 # my $docs_prefix = shift;
-my $docs_prefix = "/media/carti/aaa_aaa/";
+# my $docs_prefix = "/media/carti/aaa_aaa/";
 # my $docs_prefix = "/media/ceva1/Audio/Carti/aaa_aaa/";
 # my $docs_prefix = "/media/wiki_rem/media/share/Documentation/cfalcas/q/carti/www";
+my $docs_prefix = "/media/ceva1/Audio/Carti/";
 $docs_prefix = abs_path($docs_prefix);
 
 my $good_files_dir = "$docs_prefix/aaa_aaa/";
@@ -52,8 +53,8 @@ our $duplicate_files = {};
 my $duplicate_file = "$script_dir/duplicate_files";
 
 my $control_file = "doc_info_file.xml";
-my $work_prefix = "/media/carti/work";
-# my $work_prefix = "/media/ceva2/downloads/work";
+# my $work_prefix = "/media/carti/work";
+my $work_prefix = "/media/ceva2/downloads/work";
 # my $work_prefix = "./work";
 $work_prefix = abs_path($work_prefix);
 Common::makedir($work_prefix);
@@ -415,8 +416,8 @@ sub libreoffice_to_html {
 
     my $working_file = "$work_dir/$book->{'file_info'}->{'doc_filename_fixed'}";
     eval{
-    if ! (($book->{'result'}->{'libreoffice'} eq "failed" && !$retry_on_fail) ||
-	  ($book->{'result'}->{'libreoffice'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_orig'}")) {
+    if (! (($book->{'result'}->{'libreoffice'} eq "failed" && !$retry_on_fail) ||
+	  ($book->{'result'}->{'libreoffice'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_orig'}"))) {
 	$book->{'result'}->{'libreoffice'} = "failed";
 	Common::my_print "Doing the doc to html conversion for $title.\n";
 	Common::makedir($work_dir);
@@ -454,8 +455,8 @@ sub libreoffice_html_clean {
     }
 
     eval{
-    if ! (($book->{'result'}->{'html_clean'} eq "failed" && !$retry_on_fail) ||
-	  ($book->{'result'}->{'html_clean'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_clean'}")) {
+    if (! (($book->{'result'}->{'html_clean'} eq "failed" && !$retry_on_fail) ||
+	  ($book->{'result'}->{'html_clean'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_clean'}")) ) {
 	$book->{'result'}->{'html_clean'} = "failed";
 	Common::my_print "Doing the html cleanup for $title.\n";
 	my ($html, $images) = HtmlClean::clean_html_from_oo(Common::read_file($html_file_orig), $title, $work_dir);
@@ -484,8 +485,8 @@ sub libreoffice_html_to_epub {
     my ($work_dir, $title, $html_file_clean) = ("$work_prefix/$book->{'file_info'}->{'workingdir'}", $book->{'title'}, "$work_prefix/$book->{'out'}->{'html_file_clean'}");
 
     eval{
-    if ! (($book->{'result'}->{'ebook'} eq "failed" && !$retry_on_fail) ||
-	  ($book->{'result'}->{'ebook'} eq "done" && -s "$work_prefix/$book->{'out'}->{'epub_font_external'}")) {
+    if (! (($book->{'result'}->{'ebook'} eq "failed" && !$retry_on_fail) ||
+	  ($book->{'result'}->{'ebook'} eq "done" && -s "$work_prefix/$book->{'out'}->{'epub_font_external'}")) ) {
 	$book->{'result'}->{'ebook'} = "failed";
 	Common::my_print "Doing epubs for $title.\n";
 	opendir(DIR, "$work_dir");
