@@ -40,10 +40,10 @@ my $extra_tools_dir = "$script_dir/tools";
 
 my $workign_mode = shift;
 # my $docs_prefix = shift;
-# my $docs_prefix = "/media/carti/aaa_aaa/";
+my $docs_prefix = "/media/carti/aaa_aaa/";
 # my $docs_prefix = "/media/ceva1/Audio/Carti/aaa_aaa/";
 # my $docs_prefix = "/media/wiki_rem/media/share/Documentation/cfalcas/q/carti/www";
-my $docs_prefix = "/media/ceva1/Audio/Carti/";
+# my $docs_prefix = "/media/ceva1/Audio/Carti/";
 $docs_prefix = abs_path($docs_prefix);
 
 my $good_files_dir = "$docs_prefix/aaa_aaa/";
@@ -53,8 +53,8 @@ our $duplicate_files = {};
 my $duplicate_file = "$script_dir/duplicate_files";
 
 my $control_file = "doc_info_file.xml";
-# my $work_prefix = "/media/carti/work";
-my $work_prefix = "/media/ceva2/downloads/work";
+my $work_prefix = "/media/carti/work";
+# my $work_prefix = "/media/ceva2/downloads/work";
 # my $work_prefix = "./work";
 $work_prefix = abs_path($work_prefix);
 Common::makedir($work_prefix);
