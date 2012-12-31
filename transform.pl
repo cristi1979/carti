@@ -48,9 +48,14 @@ my $libreoo_config = $ENV{'HOME'}."/.config/lodev/4/user/basic/Standard/";
 # my $libreoo_home = $ENV{'HOME'}."/.libreoffice/";
 
 my $workign_mode = shift;
+<<<<<<< HEAD
 my $docs_prefix = shift;
 print "Something like transform.pl -clean|-epub /some/dir/\n" if ! defined $workign_mode || ! defined $docs_prefix;
 # my $docs_prefix = "/media/carti/aaa_aaa/";
+=======
+# my $docs_prefix = shift;
+my $docs_prefix = "/media/carti/aaa_aaa/";
+>>>>>>> b39156bdef204ef4389ba10f6807bb5d35123411
 # my $docs_prefix = "/media/ceva1/Audio/Carti/aaa_aaa/";
 # my $docs_prefix = "/media/wiki_rem/media/share/Documentation/cfalcas/q/carti/www";
 # my $docs_prefix = "/media/ceva1/Audio/Carti/";
@@ -63,8 +68,8 @@ our $duplicate_files = {};
 my $duplicate_file = "$script_dir/duplicate_files";
 
 my $control_file = "doc_info_file.xml";
-# my $work_prefix = "/media/carti/work";
-my $work_prefix = "/media/ceva2/downloads/work";
+my $work_prefix = "/media/carti/work";
+# my $work_prefix = "/media/ceva2/downloads/work";
 # my $work_prefix = "./work";
 $work_prefix = abs_path($work_prefix);
 Common::makedir($work_prefix);
