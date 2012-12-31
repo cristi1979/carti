@@ -1,0 +1,204 @@
+@font-face{
+    font-family:"Bookman", serif, sans-serif;
+    font-style:normal;
+    font-weight:normal;
+    src:url(BookmanOS.ttf)
+    
+}
+@font-face{
+    font-family:"Bookman", serif, sans-serif;
+    font-style:normal;
+    font-weight:bold;
+    src:url(BookmanOS.ttf)
+    
+}
+@font-face{
+    font-family:"Bookman", serif, sans-serif;
+    font-style:italic;
+    font-weight:normal;
+    src:url(BookmanOS.ttf)
+    
+}
+@font-face{
+    font-family:"Bookman", serif, sans-serif;
+    font-style:italic;
+    font-weight:bold;
+    src:url(BookmanOS.ttf)
+    
+}
+body {font-family:"Bookman"}
+p,table{font-family:"Bookman"}
+li,table.wikitable {font-family:"Bookman";}
+h1,h2,h3,h4,h5,h6,h7,h8 {font-family:"Bookman";}
+
+
+
+.calibre {
+    display: block;
+    margin-bottom: 0;
+    margin-left: 5pt;
+    margin-right: 5pt;
+    margin-top: 0;
+    padding-left: 0;
+    padding-right: 0
+    }
+.calibre1 {
+    font-family: Bookman Old Style, serif
+    }
+.calibre10 {
+    font-family: Book Antiqua, serif
+    }
+.calibre11 {
+    font-size: 9pt
+    }
+.calibre2 {
+    font-weight: bold
+    }
+.calibre3 {
+    display: block
+    }
+.calibre4 {
+    display: block
+    }
+.calibre5 {
+    font-style: italic
+    }
+.calibre6 {
+    color: #000;
+    direction: ltr;
+    display: block;
+    margin-bottom: 0.08in;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0.17in;
+    orphans: 2;
+    page-break-after: avoid;
+    text-align: CENTER;
+    widows: 2
+    }
+.calibre7 {
+    font-family: Liberation Sans, Arial, sans-serif
+    }
+.calibre8 {
+    font-size: 13.5pt
+    }
+.calibre9 {
+    font-size: smaller;
+    line-height: normal;
+    vertical-align: super
+    }
+.sdfootnote-western {
+    color: #000;
+    direction: ltr;
+    display: block;
+    font-family: "Times New Roman", serif;
+    font-size: 10pt;
+    margin-bottom: 0;
+    margin-left: 0.24in;
+    margin-right: 0;
+    margin-top: 1em;
+    orphans: 2;
+    so-language: ro-RO;
+    text-indent: -0.24in;
+    widows: 2
+    }
+.sdfootnoteanc {
+    font-size: 57%
+    }
+.western {
+    color: #000;
+    direction: ltr;
+    display: block;
+    font-family: "Times New Roman", serif;
+    font-size: 12pt;
+    line-height: 150%;
+    margin-bottom: 0;
+    margin-left: 0;
+    margin-top: 1em;
+    orphans: 2;
+    so-language: ro-RO;
+    text-align: JUSTIFY;
+    text-indent: 0.5in;
+    widows: 2
+    }
+.western1 {
+    color: #000;
+    direction: ltr;
+    display: block;
+    font-family: "Times New Roman", serif;
+    font-size: 12pt;
+    line-height: 150%;
+    margin-bottom: 0;
+    margin-left: 0;
+    margin-top: 1em;
+    orphans: 2;
+    so-language: ro-RO;
+    text-align: CENTER;
+    text-indent: 0.5in;
+    widows: 2
+    }
+.western2 {
+    color: #000;
+    direction: ltr;
+    display: block;
+    font-family: "Liberation Serif", "Times New Roman", serif;
+    font-size: 2em;
+    font-weight: bold;
+    margin-bottom: 0.08in;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0.67em;
+    orphans: 2;
+    so-language: ro-RO;
+    text-align: CENTER;
+    widows: 2
+    }
+.western3 {
+    color: #000;
+    direction: ltr;
+    display: block;
+    font-family: "Times New Roman", serif;
+    font-size: 12pt;
+    margin-bottom: 0.08in;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 1em;
+    orphans: 2;
+    so-language: ro-RO;
+    widows: 2
+    }
+.western4 {
+    color: #000;
+    direction: ltr;
+    display: block;
+    font-family: "Liberation Sans", "Arial", sans-serif;
+    font-size: 14pt;
+    font-style: italic;
+    font-weight: bold;
+    margin-bottom: 0.08in;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0.83em;
+    orphans: 2;
+    so-language: ro-RO;
+    text-align: CENTER;
+    widows: 2
+    }
+.western5 {
+    color: #000;
+    direction: ltr;
+    display: block;
+    font-family: "Times New Roman", serif;
+    font-size: 12pt;
+    margin-bottom: 0.08in;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 1em;
+    orphans: 2;
+    so-language: ro-RO;
+    text-align: CENTER;
+    widows: 2
+    }
+.pcalibre:link {
+    so-language: zxx
+    }
