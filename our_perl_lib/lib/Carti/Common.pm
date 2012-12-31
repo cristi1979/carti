@@ -13,17 +13,19 @@ use Archive::Zip qw( :ERROR_CODES );
 use XML::Simple;
 use Cwd 'abs_path';
 use Encode;
+$| = 1;
 
 sub xmlfile_to_hash {
     my $file = shift;
     my $xml = new XML::Simple;
+#     print "Get hash from xml.\n";
     my $hash;
-    eval{$hash = $xml->XMLin("$file")};
+    eval{$hash = $xml->XMLin($file)};
     return if $@;
     foreach (keys %$hash){
 	$hash->{$_} = encode_utf8($hash->{$_}) if (defined $hash->{$_} && !ref($hash->{$_}))
     };
-
+    unlink $file || die "can't delete file\n";
     return $hash;
 }
 
@@ -64,31 +66,52 @@ sub add_file_to_zip {
     my $member;
 
     my $zip = Archive::Zip->new();
-    if (-f $zip_file){$zip->read("$zip_file") == AZ_OK or die "read error\n"};
-    if (! defined $txt) {
+    if (-f $zip_file){$zip->read($zip_file) == AZ_OK or die "read error\n";};
+#     if (! defined $txt) {
 	my ($name,$dir,$suffix) = fileparse($add_file, qr/\.[^.]*/);
-	$zip->removeMember( "$name$suffix" );
-	$member = $zip->addFile($add_file, "$name$suffix") or die "Error adding file $name$suffix to zip";
-    } else {
-	$zip->removeMember( $add_file );
-	$member = $zip->addString($txt, $add_file) or die "Error adding txt $add_file to zip";
-    }
+# 	$member = $zip->memberNamed("$name$suffix");
+# 	$member->fileName($add_file);
+
+# 	$zip->removeMember( "$name$suffix" );
+#     print "qe $add_file   $name,$dir,$suffix\n";
+	$member = $zip->addFile($add_file, "$name$suffix", 9) or die "Error adding file $name$suffix to zip";
+# 	$member = $zip->updateMember({ memberOrZipName => "$name$suffix", name => $add_file }) or die "Error adding file $name$suffix to zip";
+#     } else {
+# 	$zip->removeMember( $add_file );
+# 	$member = $zip->addString($txt, $add_file) or die "Error adding txt $add_file to zip";
+#     }
     $member->desiredCompressionLevel( 9 );
     if (-f $zip_file){
+    print "overwrite file $zip_file with $add_file\n";
 	$zip->overwrite() == AZ_OK or die "write error\n"
     } else {
 	$zip->writeToFileNamed($zip_file) == AZ_OK or die "write new zip error\n"
     };
 }
 
-sub read_file_from_zip {
-    my ($zip_file, $read_file) = @_;
-    my ($name,$dir,$suffix) = fileparse($read_file, qr/\.[^.]*/);
-
-    my $zip = Archive::Zip->new();
-    if (-f $zip_file){$zip->read("$zip_file") == AZ_OK or die "read error\n"};
-    return $zip->contents($read_file);
-}
+# # # sub read_file_from_zip {
+# # #     my ($zip_file, $member) = @_;
+# # #     print "Read zip file $zip_file.\n";
+# # #     my ($name,$dir,$suffix) = fileparse($zip_file, qr/\.[^.]*/);
+# # # 
+# # #     my $zip = Archive::Zip->new();
+# # #     if (-f $zip_file){$zip->read($zip_file) == AZ_OK or die "read error\n"};
+# # #     
+# # # #     my ( $string, $status ) = $zip->contents($member);
+# # # #     die "error $status" unless $status == AZ_OK;
+# # # # my $string = $zip->contents($member);
+# # #     write_file("$dir/$member.xml", $zip->contents($member));
+# # #     
+# # # #     print "writing $dir/$member.xml\n";
+# # # #     open (MYFILE, "> $dir/$member.xml");
+# # # #     print MYFILE $zip->contents($member);
+# # # #     close (MYFILE); 
+# # #     print "Done reading zip file.\n";
+# # #     
+# # #     my $string = read_file("$dir/$member.xml");
+# # # #     return "$dir/$member.xml";
+# # #     return $string;
+# # # }
 
 our $str_append = "";
 our $str_prepand = "";
@@ -234,7 +257,7 @@ sub move_dir {
 }
 
 sub write_file {
-    my ($path,$obj) = @_;
+    my ($path, $obj) = @_;
     my $text;
     if (ref($obj) eq 'HTML::TreeBuilder') {
 	$text = HtmlClean::html_tidy($obj->as_HTML('<>&', "\t"));

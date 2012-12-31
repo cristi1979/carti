@@ -5,6 +5,9 @@ use strict;
 $SIG{__WARN__} = sub { die @_ };
 # #     get utf8 codes from http://www.fileformat.info/info/unicode/char/25cb/index.htm
 # perl -e 'print sprintf("\\x{%x}", $_) foreach (unpack("C*", "Ó"));print"\n"'
+
+#ubuntu:libdbi-perl perltidy libhtml-tidy-perl libcss-tiny-perl libhtml-treebuilder-xpath-perl libarchive-zip-perl libxml-simple-perl libdevel-size-perl
+
 use Cwd 'abs_path';
 use File::Basename;
 $| = 1;
@@ -38,12 +41,19 @@ use Carti::Common;
 my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
 my $extra_tools_dir = "$script_dir/tools";
 
+# my $libreoo_path = "/opt/libreoffice3.5/program/soffice";
+my $libreoo_path = "/opt/lodev4.0/program/soffice";
+my $libreoo_home = $ENV{'HOME'}."/.config/lodev/";
+my $libreoo_config = $ENV{'HOME'}."/.config/lodev/4/user/basic/Standard/";
+# my $libreoo_home = $ENV{'HOME'}."/.libreoffice/";
+
 my $workign_mode = shift;
-# my $docs_prefix = shift;
+my $docs_prefix = shift;
+print "Something like transform.pl -clean|-epub /some/dir/\n" if ! defined $workign_mode || ! defined $docs_prefix;
 # my $docs_prefix = "/media/carti/aaa_aaa/";
 # my $docs_prefix = "/media/ceva1/Audio/Carti/aaa_aaa/";
 # my $docs_prefix = "/media/wiki_rem/media/share/Documentation/cfalcas/q/carti/www";
-my $docs_prefix = "/media/ceva1/Audio/Carti/";
+# my $docs_prefix = "/media/ceva1/Audio/Carti/";
 $docs_prefix = abs_path($docs_prefix);
 
 my $good_files_dir = "$docs_prefix/aaa_aaa/";
@@ -61,7 +71,7 @@ Common::makedir($work_prefix);
 my $path_to_db_file = "/dev/shm/sqlitedb.sqlite";
 
 my $debug = 1;
-my $retry_on_fail = 0;
+my $retry_on_fail = 1;
 my $extract_cover = 0;
 my $url_sep = " -- ";
 my $font = "BookmanOS.ttf";
@@ -164,22 +174,15 @@ sub get_series {
     return ($series, $series_no, $file);
 }
 
-# my $libreoo_path = "/opt/libreoffice3.5/program/soffice";
-my $libreoo_path = "soffice";
-# my $libreoo_home = $ENV{'HOME'}."/.config/libreoffice/";
-my $libreoo_home = $ENV{'HOME'}."/.libreoffice/";
 sub doc_to_html_macro {
     my $doc_file = shift;
     my ($name,$dir,$suffix) = fileparse($doc_file, qr/\.[^.]*/);
     Common::my_print "Start generating html file.\n";
     my $status;
+#     soffice -env:UserInstallation=file:///tmp/foobar
     `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
-    if (! -f "$libreoo_home/3/user/basic/Standard/" || -s "$libreoo_home/3/user/basic/Standard/" < 500) {
-	Common::my_print "Doing initial config for libreoffice.\n";
-	if (-d $libreoo_home){remove_tree("$libreoo_home") || die "Can't remove dir $libreoo_home: $!.\n"};
-	system("$libreoo_path", "--headless", "--invisible", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "creating initial libreoffice failed ($?): $!.\n";
-	copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", "$libreoo_home/3/user/basic/Standard/") or die "Copy failed libreoffice macros: $!\n";
-    }
+#     if (! -f $libreoo_config || -s $libreoo_config < 500) {
+#     }
     eval {
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 600;
@@ -264,7 +267,7 @@ die "\nERROR WWW\n_$file\_\n";
 	    $name = $tmp1;
 	    $suffix = $tmp2;
 	}
-	return if $suffix =~ m/^\.jpg$/i;
+	return if $suffix =~ m/^\.(jpe?g|png)$/i;
 	my $file_no_path = $file; $file_no_path =~ s/^$docs_prefix\/*//;
 	my $book->{'doc_file'} = $file_no_path;
 	$book->{'name'} = $name;
@@ -396,7 +399,7 @@ sub convert_images {
 	my $orig_name = $key;
 	my $new_name = $images->{$key}->{'name'};
 	if (! -f "$work_dir/$orig_name") {
-	    die "Missing image $work_dir/$orig_name.\n";
+	    print "Missing image $work_dir/$orig_name.\n";
 	    next;
 	}
 	Common::my_print "\tConverting file $orig_name to $new_name.\n";
@@ -416,8 +419,9 @@ sub libreoffice_to_html {
 
     my $working_file = "$work_dir/$book->{'file_info'}->{'doc_filename_fixed'}";
     eval{
-    if (! (($book->{'result'}->{'libreoffice'} eq "failed" && !$retry_on_fail) ||
-	  ($book->{'result'}->{'libreoffice'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_orig'}"))) {
+#     if (! (($book->{'result'}->{'libreoffice'} eq "failed" && !$retry_on_fail) ||
+# 	  ($book->{'result'}->{'libreoffice'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_orig'}"))) {
+    if ($book->{'result'}->{'libreoffice'} ne "done" && $retry_on_fail) {
 	$book->{'result'}->{'libreoffice'} = "failed";
 	Common::my_print "Doing the doc to html conversion for $title.\n";
 	Common::makedir($work_dir);
@@ -433,7 +437,8 @@ sub libreoffice_to_html {
 die "SPARTAAAA!!!!\n" if ! -f $zip_file;
 	unlink $working_file || die "Can't remove file $working_file: $!\n";
 	$book->{'result'}->{'libreoffice'} = "done";
-    }};
+    }
+    };
     Common::hash_to_xmlfile($book, "$xml_book");
     print "XXXX LO ERROR\n".Dumper($title, $@). "error: $?.\n" if ($@);
     return ($@)?1:0;
@@ -455,8 +460,10 @@ sub libreoffice_html_clean {
     }
 
     eval{
-    if (! (($book->{'result'}->{'html_clean'} eq "failed" && !$retry_on_fail) ||
-	  ($book->{'result'}->{'html_clean'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_clean'}")) ) {
+#     if (! (($book->{'result'}->{'html_clean'} eq "failed" && !$retry_on_fail) ||
+# 	  ($book->{'result'}->{'html_clean'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_clean'}")) ) {
+    if ($book->{'result'}->{'html_clean'} ne "done" && $retry_on_fail){
+    print "caca\n";
 	$book->{'result'}->{'html_clean'} = "failed";
 	Common::my_print "Doing the html cleanup for $title.\n";
 	my ($html, $images) = HtmlClean::clean_html_from_oo(Common::read_file($html_file_orig), $title, $work_dir);
@@ -465,7 +472,8 @@ sub libreoffice_html_clean {
 	$book->{'scurte'} = 1 if (length($html) <= 35000);
 	$book->{'medii'} = 1 if (length($html) >= 30000 && length($html) <= 450000);
 	$book->{'lungi'} = 1 if (length($html) >= 400000);
-	if (! $book->{'coperta'} && defined $cover){
+	if (! $book->{'coperta'} && (defined $cover && $cover ne "")){
+	    print "We got this cover info: cover=$cover and coperta=$book->{'coperta'}\n";
 	    my ($name_b,$dir_b,$suffix_b) = fileparse(decode_utf8("$docs_prefix/$book->{'doc_file'}"), qr/\.[^.]*/);
 	    my ($name_c,$dir_c,$suffix_c) = fileparse($cover, qr/\.[^.]*/);
 	    copy("$cover", "$dir_b/$name_b$suffix_c") or die "Copy cover failed \n\t$cover\n\t$dir_b/$name_b$suffix_c:\n$!\n";
@@ -473,7 +481,8 @@ sub libreoffice_html_clean {
 	}
 	unlink "$html_file_orig" || die "Can't remove file $html_file_orig: $!\n";
 	$book->{'result'}->{'html_clean'} = "done";
-    }};
+    }
+    };
     Common::hash_to_xmlfile($book, "$xml_book");
     print "YYYY clean ERROR\n".Dumper($title, $@). "error: $?.\n" if ($@);
     return ($@)?1:0;
@@ -485,8 +494,9 @@ sub libreoffice_html_to_epub {
     my ($work_dir, $title, $html_file_clean) = ("$work_prefix/$book->{'file_info'}->{'workingdir'}", $book->{'title'}, "$work_prefix/$book->{'out'}->{'html_file_clean'}");
 
     eval{
-    if (! (($book->{'result'}->{'ebook'} eq "failed" && !$retry_on_fail) ||
-	  ($book->{'result'}->{'ebook'} eq "done" && -s "$work_prefix/$book->{'out'}->{'epub_font_external'}")) ) {
+#     if (! (($book->{'result'}->{'ebook'} eq "failed" && !$retry_on_fail) ||
+# 	  ($book->{'result'}->{'ebook'} eq "done" && -s "$work_prefix/$book->{'out'}->{'epub_font_external'}")) ) {
+    if ($book->{'result'}->{'ebook'} ne "done" || ! -s "$work_prefix/$book->{'out'}->{'epub_font_external'}" && $retry_on_fail) {
 	$book->{'result'}->{'ebook'} = "failed";
 	Common::my_print "Doing epubs for $title.\n";
 	opendir(DIR, "$work_dir");
@@ -530,7 +540,8 @@ sub html_to_epub {
     my $epub_parameters = "--disable-font-rescaling --minimum-line-height=0 --toc-threshold=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --authors=\"".(decode_utf8($authors))."\" --title=\"".(decode_utf8($title))."\"";
 # --keep-ligatures --rating=between 1 and 5
     $epub_parameters .= " --tags=\"".(join ',', @tags)."\"" if scalar @tags;
-    $epub_parameters .= " --series=\"".(decode_utf8($book->{'seria'}))."\" --series-index=\".$book->{'seria_no'}"."\"" if $book->{'seria'} && $book->{'seria_no'};
+    $epub_parameters .= " --series=\"".(decode_utf8($book->{'seria'}))."\" --series-index=\"$book->{'seria_no'}"."\"" if $book->{'seria'} && $book->{'seria_no'};
+    print Dumper($book->{'seria_no'});
     if ($book->{'coperta'}) {
 	my $cover = "$book->{'coperta'}";
 	$epub_parameters .= " --cover=\"".(decode_utf8($cover))."\"";
@@ -544,12 +555,18 @@ sub html_to_epub {
 #     Common::hash_to_xmlfile($book, $xml_book);
 
     ### epub with external font
-    make_ebook($book, "epub_font_external", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"");
-    Common::hash_to_xmlfile($book, $xml_book);
+#     make_ebook($book, "epub_font_external", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"");
+#     Common::hash_to_xmlfile($book, $xml_book);
 
     ### epub with embedded font
-#     make_ebook($book, "epub_font_included", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"");
-#     Common::hash_to_xmlfile($book, $xml_book);
+    make_ebook($book, "epub_font_included", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"");
+    if (-f "$work_prefix/$book->{'out'}->{'epub_font_included'}") {
+	Common::add_file_to_zip("$work_prefix/$book->{'out'}->{'epub_font_included'}", "$extra_tools_dir/$font");
+    } else {
+	die "epub not created\n";
+    }
+#     `zip "$work_prefix/$book->{'out'}->{'epub_font_included'}" "$extra_tools_dir/$font"`;
+    Common::hash_to_xmlfile($book, $xml_book);
 
     ### normal mobi
 #     make_ebook($book, "mobi", $epub_command,  "$epub_parameters");
@@ -563,19 +580,23 @@ sub clean_files {
     my $good_file = "$script_dir/good_files";
 
     if (-f $bad_file && ! -f "$bad_file.zip") {
-	$old_bad_files = Common::xmlfile_to_hash("$bad_file");
+	$old_bad_files = Common::xmlfile_to_hash($bad_file);
     } elsif (! -f $bad_file && -f "$bad_file.zip") {
-	$old_bad_files = Common::xmlfile_to_hash(Common::read_file_from_zip("$bad_file.zip", "bad_files"));
+# 	my $old_bad_filename = Common::read_file_from_zip("$bad_file.zip", "bad_files");
+# 	die "$old_bad_filename\n";
+# 	$old_bad_files = Common::xmlfile_to_hash(Common::read_file_from_zip("$bad_file.zip", "bad_files"));
+	`unzip "$bad_file.zip" -d "$script_dir"`;
+	$old_bad_files = Common::xmlfile_to_hash($bad_file);
     } else {
 	die "Error deciding between $bad_file and $bad_file.zip\n";
     }
 
     $good_files = get_files_from_dir($good_files_dir);
-    Common::hash_to_xmlfile( $good_files, $good_file );
+#     Common::hash_to_xmlfile( $good_files, $good_file );
     $new_files = get_files_from_dir($new_files_dir);
-    Common::hash_to_xmlfile( $new_files, $new_file );
+#     Common::hash_to_xmlfile( $new_files, $new_file );
     $new_bad_files = get_files_from_dir($bad_files_dir);
-    Common::hash_to_xmlfile( $new_bad_files, "$bad_file.new" );
+#     Common::hash_to_xmlfile( $new_bad_files, "$bad_file.new" );
 
 #     $good_files = Common::xmlfile_to_hash($good_file) if -f $good_file;
 #     $new_files = Common::xmlfile_to_hash($new_file) if -f $new_file;
@@ -587,13 +608,16 @@ sub clean_files {
     @tmp2 = (keys %$new_bad_files);
     my ($only_in1, $only_in2, $common) = Common::array_diff(\@tmp1, \@tmp2);
     $old_bad_files->{$_} = $new_bad_files->{$_} foreach (@$only_in2);
+    unlink "$bad_file.zip";
     Common::hash_to_xmlfile( $old_bad_files, $bad_file );
-    unlink ("$bad_file.zip");
-    Common::add_file_to_zip("$bad_file.zip", $bad_file);
-    unlink ($bad_file);
+    `zip -j "$bad_file.zip" "$bad_file"`;
+#     Common::add_file_to_zip("$bad_file.zip", $bad_file);
+# Common::hash_to_xmlfile( $new_bad_files, "$bad_file.2" );
+    unlink $bad_file;
     ### all bad files are duplicate files
-    $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$common);
-    $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$only_in2);
+#     $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$common);
+#     $duplicate_files->{$new_bad_files->{$_}} = 1 foreach (@$only_in2);
+    $duplicate_files->{$old_bad_files->{$_}} = 1 foreach (keys %$old_bad_files);;
 
     ## compare new files with bad files
     @tmp1 = (keys %$new_files);
@@ -607,15 +631,19 @@ sub clean_files {
     ($only_in1, $only_in2, $common) = Common::array_diff(\@tmp1, \@tmp2);
     $duplicate_files->{$new_files->{$_}} = 1 foreach (@$common);
 
-    Common::hash_to_xmlfile( $duplicate_files, $duplicate_file );
+#     Common::hash_to_xmlfile( $duplicate_files, $duplicate_file );
     foreach my $key (keys %$duplicate_files) {
 	my $file = decode_utf8($key);
 	next, die "Dissapeared: $key\n" if ! -f $key;
 	my ($name,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
 	Common::makedir("$docs_prefix/duplicate/$dir/");
-	move("$key", "$docs_prefix/duplicate/$dir/") || die "can't move duplicate file\n\t$key.\n";
+	move("$key", "$docs_prefix/duplicate/$dir/") || die "can't move duplicate file ($!)\n\t$key.\n";
 	print Dumper("duplicate ".$file);
     }
+    
+#     `find "$good_files_dir" -depth -type d -empty -exec rmdir {} \\;`
+    finddepth(sub{rmdir}, $good_files_dir);
+    finddepth(sub{rmdir}, $bad_files_dir);
 }
 
 sub ri_html_to_epub {
@@ -793,6 +821,11 @@ sub main_process_worker {
     do { eval{$dbh->selectall_arrayref( "SELECT * FROM work")}} until (! $@);
 # LIBREOFFICE CLEAN EBOOK LIBREOFFICE_RUNNING CLEAN_RUNNING EBOOK_RUNNING LIBREOFFICE_DONE CLEAN_DONE EBOOK_DONE SINGLE_MODE
     $dbh->do( "INSERT INTO $table_info_name VALUES (1, 10, 10, 0, 0, 0, 0, 0, 0, 0, NULL)");
+
+    Common::my_print "Doing initial config for libreoffice.\n";
+    if (-d $libreoo_home){remove_tree("$libreoo_home") || die "Can't remove dir $libreoo_home: $!.\n"};
+    system("$libreoo_path", "--headless", "--invisible", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "creating initial libreoffice failed ($?): $!.\n";
+    copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", $libreoo_config) or die "Copy failed libreoffice macros: $!\n";
 
     my ($forks, $pid);
     $pid = fork();

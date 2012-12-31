@@ -15,14 +15,15 @@ use Encode;
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 use Term::ANSIColor;
-
+#apps: mplayer ffmpeg mencoder mkvtoolnix HanBrakeCLI
 
 my $path_prefix = abs_path(shift);
 my $arg = shift || "";
-print Dumper($arg);
-my $bkp_path = "/media/ceva1/Audio/aaa__de_sters/bkp";
+
+# print Dumper($arg);
+# my $bkp_path = "/media/ceva1/Audio/aaa__de_sters/bkp";
 # my $bkp_srt_path = "/media/ceva2/Video/bkp_srt";
-# my $bkp_path = "./bkp";
+my $bkp_path = "./bkp";
 my $bkp_srt_path = "$bkp_path/../bkp_srt";
 my $movies = {};
 my $force_subtitles = "no";
@@ -169,7 +170,7 @@ sub work_on_subtitle {
     close MYFILE;
 
     my @to_move = ();
-    my $fontsize = sprintf "%.0f", 3/100*sqrt($w*$w+$h*$h);
+    my $fontsize = sprintf "%.0f", 6/100*sqrt($w*$w+$h*$h);
     my $header = '[Script Info]
 ; This script was created by subtitleeditor (0.38.0)
 ; http://home.gna.org/subtitleeditor/
@@ -349,7 +350,7 @@ sub work_on_video {
     my @x264_settings = ("-q", "25", "-x", "b-adapt=2:direct=auto:me=umh:rc-lookahead=50:ref=5:subme=8:psy-rd=1\|0.15:deblock=-1\|-1:analyse=all:no-fast-pskip=1:no-dct-decimate=1");
 #     , "--detelecine"
     print color("green"), "\t\t*** Transcoding video with parameters $filetoencode, $video_file.\n", color 'reset';
-    my @handbrake = ("HandBrakeCLI", "--decomb", "--keep-display-aspect", "--loose-anamorphic","-f" ,"mp4", "-e", "x264", "-O", "-4", "-i", "$filetoencode", "-o", "$video_file", "--audio", "none", @HB_opts, @x264_settings);
+    my @handbrake = ("HandBrakeCLI", "--decomb", "--keep-display-aspect", "--loose-anamorphic", "-f", "mp4", "-e", "x264", "-O", "-4", "-i", "$filetoencode", "-o", "$video_file", "--audio", "none", @HB_opts, @x264_settings);
     system(@handbrake) == 0 or die "error running handbrake: $?.\n";
     unlink "$filetoencode" || die "delete mkv: $!\n" if -f "$filetoencode";
 
@@ -378,9 +379,9 @@ sub work_on_file {
     return if $arg =~ m/\-[m|s]/i;
 #     ISO:
 #     copy all VOBs
-# mencoder dvd://10 -dvd-device /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso -oac copy -channels 6 -o audio -ovc frameno
+# mencoder dvd://10 -dvd-device $PATH_TO_ISO.iso -oac copy -channels 6 -o audio -ovc frameno
 ## extract chapter
-# mplayer dvd://43 -dvd-device /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso -chapter 4
+# mplayer dvd://43 -dvd-device $PATH_TO_ISO.iso -chapter 4
 #     cat 1.vob 2.vob ... > 0.vob
 #     mkvmerge -o coco.mkv 0.vos sub.ssa
 #     HandBrakeCLI -5 -e x264 -q 0.6 -f mp4 --rate 25 -O -4 -s 1 --subtitle-burn -2 -T -a 1 --aencoder copy:ac3  -i coco.mkv -o file.mp4
@@ -388,6 +389,7 @@ sub work_on_file {
 # FILE=some.iso
 # lsdvd "$FILE" 	find all chapters (length > 1 min)
 # mplayer -aid 135 dvd://43 -dvd-device "$FILE" 	find the correct language (128 +)
+# mplayer -alang ro dvd://1 -dvd-device $FILE
 # mencoder -aid 135 dvd://43 -dvd-device "$FILE" -idx -ovc copy -oac copy -o some.avi
 
 #     flv:
@@ -395,12 +397,12 @@ sub work_on_file {
 #     HandBrakeCLI -5 -e x264 -q 0.6 --rate 23.976 -i "$NAME.flv" -o "$NAME.mp4"
 
 #     mencoder -ss 00:10:00 -endpos 00:01:00 -ovc copy -oac copy -o result.avi "$FILE"
-#     mplayer -vo null -ao null -frames 0 -identify "$file" 2> /dev/null | grep "^ID_"
+#     mplayer -vo null -ao null -frames 0 -identify "$FILE" 2> /dev/null | grep "^ID_"
 
-# mencoder dvd://10 -dvd-device /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso  -idx -ovc copy -nosound -o /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.avi
-# /home/cristi/programe/scripts/nero/neroAacEnc -ignorelength -q 0.60 -if audiodump.wav -of audio.m4a & mplayer -vc null -vo null -ao pcm:fast dvd://10 -dvd-device /media/ceva2/downloads/torente/I\ Heart\ Huckabees/I\ Heart\ Huckabees.iso
+# mencoder dvd://10 -dvd-device $PATH_TO_ISO.iso  -idx -ovc copy -nosound -o $PATH_TO_ISO.avi
+# /home/cristi/programe/scripts/nero/neroAacEnc -ignorelength -q 0.60 -if audiodump.wav -of audio.m4a & mplayer -vc null -vo null -ao pcm:fast dvd://10 -dvd-device $PATH_TO_ISO.iso
 
-# `ffmpeg -i "$file" -i "/media/Video3/__din nou/$name.audio" -map 0:0 -map 1:0 -acodec copy -vcodec copy "/media/Video1/Seriale/STNG/$name.mp4"`;
+# `ffmpeg -i "$FILE" -i "/media/Video3/__din nou/$name.audio" -map 0:0 -map 1:0 -acodec copy -vcodec copy "/media/Video1/Seriale/STNG/$name.mp4"`;
 
 
 # **** MKV
@@ -410,6 +412,8 @@ sub work_on_file {
 # mplayer -nocorrect-pts -ao pcm:fast:file=>(~/programe/encoding/nero/neroAacEnc -if - -of $i""audio.aac 2>/dev/null) -vo null -vc null $i""audio.ac3
 # sleep 3
 # ffmpeg -i $i""audio.aac -acodec copy -i $i""video.mp4 -vcodec copy "$file".mp4
+## inspect file:
+# mkvmerge -i input.mkv
 #
 # **** MP4
 # file="Hitchhikers Guide to the Galaxy - 01.mp4"
@@ -487,3 +491,4 @@ sub add_document {
 }
 
 find ({ wanted => sub { add_document ($File::Find::name) if -f && (/(\.avi|\.mpg|\.mpeg|\.flv|\.wmv|\.mov|\.3gp|\.ogm|\.divx|\.3gp|\.ogm|\._iso_|\._mp4_|\.mkv)$/i) }}, $path_prefix ) if  (-d "$path_prefix");
+#find ({ wanted => sub { add_document ($File::Find::name) if -f && (/(\.mp4)$/i) }}, $path_prefix ) if  (-d "$path_prefix");

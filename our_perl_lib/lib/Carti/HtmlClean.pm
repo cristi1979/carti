@@ -209,6 +209,12 @@ sub doc_tree_fix_links_from_oo {
     foreach (@{  $tree->extract_links()  }) {
 	my($link, $element, $attr, $tag) = @$_;
 	if ($tag eq "img" || $tag eq "body") {
+	    foreach my $attr_name ($element->all_external_attr_names){
+		my $attr_value = $element->attr($attr_name);
+		if ( $attr_name eq "align" ){
+		    $element->attr("$attr_name", undef);
+		}
+	    }
 	    my $name_ext = Common::normalize_text(uri_unescape($link));
 	    $name_ext =~ s/^\.\.\///;
 	    my ($name,$dir,$ext) = fileparse($name_ext, qr/\.[^.]*/);
@@ -526,12 +532,13 @@ sub doc_tree_clean_span {
 		    } else {
 			next if $att =~ m/^\s*float: (top|left|right)\s*$/i
 				    || $att =~ m/^\s*text-decoration:/i
-				    || $att =~ m/^\s*font-variant: small-caps\s*$/i
+				    || $att =~ m/^\s*font-variant: (small-caps|normal)\s*$/i
 				    || $att =~ m/^\s*position: absolute\s*$/i
 				    || $att =~ m/^\s*(top|left|right): -?[0-9]{1,}(\.[0-9]{1,})?in\s*$/i
 				    || $att =~ m/^\s*(border|padding)/i
 				    || $att =~ m/^\s*font-family:/i
 				    || $att =~ m/^\s*so-language: /i
+				    || $att =~ m/^\s*text-transform: uppercase$/i
 				    || $att =~ m/^\s*font-size: [0-9]{1,}%\s*$/i;
 die "Attr name for span_style = $att.\n";
 			$res .= $att.";";
@@ -547,6 +554,29 @@ die "Attr name for span_style = $att.\n";
 	    }
 	}
     }
+    return $tree;
+}
+
+sub doc_tree_fix_img {
+    my $tree = shift;
+    Common::my_print "\t".(++$counter)." Fix img.\n";
+    foreach my $a_tag ($tree->guts->look_down(_tag => "p")) {
+	foreach my $content_tag ($a_tag->content_refs_list) {
+	    if (ref $$content_tag) {
+		if ($$content_tag->tag eq "img") {
+		    my $img = $$content_tag->clone;
+		    $$content_tag->detach;
+			my $p = HTML::Element->new('p');
+# 			my $b = HTML::Element->new('br');
+# 			$b->push_content($p);
+			$p->push_content($img);
+# 			$a_tag->postinsert($b);
+			$a_tag->postinsert($p);
+		}
+	    }
+	}
+    }
+#     $_->delete foreach (@delete_later);
     return $tree;
 }
 
@@ -605,6 +635,7 @@ sub doc_tree_fix_paragraph {
 			  || $attr_val =~ m/^\s*line-height: [0-9]+%\s*$/i
 			  || $attr_val =~ m/^\s*(widows|orphans): [0-9]+\s*$/i
 			  || $attr_val =~ m/^\s*border-(top|bottom|left|right): .+\s*$/i
+			  || $attr_val =~ m/^\s*border: (([0-9]+\.)?[0-9]+pt\s*) double #[0-9a-f]{6}\s*$/i
 			  || $attr_val =~ m/^\s*text-decoration: none\s*$/i
 			  || $attr_val =~ m/^\s*border: (none|-?([0-9]+\.)?[0-9]+px solid #[0-9a-f]{6})\s*$/i
 			  || $attr_val =~ m/^\s*page-break-(after|before|inside): (avoid|always|auto)\s*$/i
@@ -613,7 +644,7 @@ sub doc_tree_fix_paragraph {
 			  || $attr_val =~ m/^\s*padding: (([0-9]+\.)?[0-9]+in\s*)+$/i
 			  || $attr_val =~ m/^\s*line-height: ([0-9]+\.)?[0-9]+in\s*$/i
 			) {
-		    } elsif ($attr_val =~ m/^\s*font-(weight|style): normal\s*$/i) {
+		    } elsif ($attr_val =~ m/^\s*font-(weight|style|variant): (normal|small-caps)\s*$/i) {
 			$new_attr_value = "$new_attr_value;$attr_val";
 		    } else {
 			die "\t\tUnknown value for style in paragraph: $attr_val.\n";
@@ -652,7 +683,7 @@ sub doc_tree_fix_a {
     Common::my_print "\t".(++$counter)." Fix <a>.\n";
     foreach my $a_tag ($tree->guts->look_down(_tag => "a")) {
 	foreach my $attr_name ($a_tag->all_external_attr_names){
-# 	    $a_tag->attr("id", "a".$a_tag->attr($attr_name)) if ( $attr_name =~ m/^name$/i);
+	    $a_tag->replace_with_content if ( $attr_name =~ m/^href$/i);
 	    $a_tag->attr($attr_name, undef) if ( $attr_name =~ m/^SDFIXED$/i);
 	}
     }
@@ -704,6 +735,7 @@ sub clean_html_from_oo {
     $tree = doc_tree_remove_empty_span($tree);
     $tree = doc_tree_clean_defs($tree);
     $tree = doc_tree_clean_body($tree);
+    $tree = doc_tree_fix_img($tree);
     ($tree, $images) = doc_tree_fix_links_from_oo($tree, $no_links);
 #     $tree = doc_tree_clean_h($tree, 0);
     $tree = doc_tree_clean_div($tree);
@@ -760,7 +792,9 @@ sub html_tidy {
 		    && $_->{'_text'} !~ m/^<a> cannot copy name attribute to id$/
 		    && $_->{'_text'} !~ m/^<img> anchor "[a-z0-9_ ]+" already defined$/i
 		    && $_->{'_text'} !~ m/^<img> cannot copy name attribute to id$/
-# 		    $_->{'_text'} !~ m/^missing <li>$/ &&
+		    && $_->{'_text'} !~ m/^inserting implicit <span>$/
+		    && $_->{'_text'} !~ m/^missing <\/span> before <p>$/
+		    && $_->{'_text'} !~ m/^missing <li>$/
 # 		    $_->{'_text'} !~ m/^<a> anchor "_[a-b]i[0-9]+" already defined$/i &&
 # 		    ;
     }
