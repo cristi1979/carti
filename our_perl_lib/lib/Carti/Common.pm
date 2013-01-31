@@ -205,7 +205,7 @@ sub array_diff {
 sub makedir {
     my $dir = shift;
     my $err;
-    make_path ("$dir", {error => \$err});
+    make_path ($dir, {error => \$err});
     if (@$err) {
 	for my $diag (@$err) {
 	    my ($file, $message) = %$diag;

@@ -7,6 +7,7 @@ $SIG{__WARN__} = sub { die @_ };
 # perl -e 'print sprintf("\\x{%x}", $_) foreach (unpack("C*", "Ó"));print"\n"'
 
 #ubuntu:libdbi-perl perltidy libhtml-tidy-perl libcss-tiny-perl libhtml-treebuilder-xpath-perl libarchive-zip-perl libxml-simple-perl libdevel-size-perl
+#fedora: perl-URI perl-HTML-Tidy perl-CSS-Tiny perl-HTML-Tree perl-Devel-Size perl-DBD-SQLite
 
 use Cwd 'abs_path';
 use File::Basename;
@@ -41,10 +42,10 @@ use Carti::Common;
 my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
 my $extra_tools_dir = "$script_dir/tools";
 
-# my $libreoo_path = "/opt/libreoffice3.5/program/soffice";
-my $libreoo_path = "/opt/lodev4.0/program/soffice";
-my $libreoo_home = $ENV{'HOME'}."/.config/lodev/";
-my $libreoo_config = $ENV{'HOME'}."/.config/lodev/4/user/basic/Standard/";
+my $libreoo_path = "/opt/libreoffice4.0/program/soffice";
+# my $libreoo_path = "/opt/lodev4.0/program/soffice";
+my $libreoo_home = $ENV{'HOME'}."/.config/libreoffice/";
+my $libreoo_config = $ENV{'HOME'}."/.config/libreoffice/4/user/basic/Standard/";
 # my $libreoo_home = $ENV{'HOME'}."/.libreoffice/";
 
 my $workign_mode = shift;
@@ -61,9 +62,10 @@ my $duplicate_file = "$script_dir/duplicate_files";
 
 my $control_file = "doc_info_file.xml";
 # my $work_prefix = "/media/carti/work";
-my $work_prefix = "/media/ceva2/downloads/work";
+my $work_prefix = "/home/cristi/Downloads/work";
 # my $work_prefix = "./work";
 $work_prefix = abs_path($work_prefix);
+die "can't find work dir\n" if ! defined $work_prefix || ! -d $work_prefix;
 Common::makedir($work_prefix);
 my $path_to_db_file = "/dev/shm/sqlitedb.sqlite";
 
@@ -125,8 +127,9 @@ sub get_files_from_dir {
 	my $file = shift;
 	print "$count\r" if ++$count % 10 == 0;
 	$file = abs_path($file);
+	my ($name,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
 	my $md5 = "md5_".Common::get_file_md5($file);
-	if ( defined $hash_q->{$md5} ) {
+	if ( defined $hash_q->{$md5} && $suffix !~ m/^(\.jpg)|(\.png)$/i) {
 	    $duplicate_files->{$file} = 1;
 	    print Dumper("duplicate $file");
 	    return;
@@ -242,11 +245,11 @@ sub get_documents {
     sub add_document {
 	my $file = shift;
 
-if ($file !~ m/^([&a-z\.\/_ \-0-9\(\)\[\],:'!"\?@;]|\x{c4}\x{83}|\x{c5}\x{9e}|\x{c5}\x{9f}|\x{c3}\x{a2}|\x{c3}\x{a8}|\x{c3}\x{a9}|\x{c3}\x{a4}|\x{c8}\x{9b}|\x{c8}\x{99}|\x{c5}\x{a2}|\x{c3}\x{8e}|\x{c3}\x{a5}|\x{c3}\x{85}|\x{c3}\x{bc}|\x{e2}\x{82}\x{ac}|\x{e2}\x{80}\x{99}|\x{c3}\x{a1}|\x{c3}\x{ba}|\x{c5}\x{a1}|\x{c5}\x{a0}|\x{c3}\x{a0}|\x{c3}\x{ae}|\x{e2}\x{80}\x{a6})+$/i){
-print "$file\n";
-$file=~ s/[&a-z\.\/_ \-0-9\(\)\[\],:'!"\?@;]|\x{c4}\x{83}|\x{c5}\x{9e}|\x{c5}\x{9f}|\x{c3}\x{a2}|\x{c3}\x{a8}|\x{c3}\x{a9}|\x{c3}\x{a4}|\x{c8}\x{9b}|\x{c8}\x{99}|\x{c5}\x{a2}|\x{c3}\x{8e}|\x{c3}\x{a5}|\x{c3}\x{85}|\x{c3}\x{bc}|\x{e2}\x{82}\x{ac}|\x{e2}\x{80}\x{99}|\x{c3}\x{a1}|\x{c3}\x{ba}|\x{c5}\x{a1}|\x{c5}\x{a0}|\x{c3}\x{a0}|\x{c3}\x{ae}|\x{e2}\x{80}\x{a6}//gi;
-die "\nERROR WWW\n_$file\_\n";
-};
+# if ($file !~ m/^([&a-z\.\/_ \-0-9\(\)\[\],:'!"\?@;]|\x{c4}\x{83}|\x{c5}\x{9e}|\x{c5}\x{9f}|\x{c3}\x{a2}|\x{c3}\x{a8}|\x{c3}\x{a9}|\x{c3}\x{a4}|\x{c8}\x{9b}|\x{c8}\x{99}|\x{c5}\x{a2}|\x{c3}\x{8e}|\x{c3}\x{a5}|\x{c3}\x{85}|\x{c3}\x{bc}|\x{e2}\x{82}\x{ac}|\x{e2}\x{80}\x{99}|\x{c3}\x{a1}|\x{c3}\x{ba}|\x{c5}\x{a1}|\x{c5}\x{a0}|\x{c3}\x{a0}|\x{c3}\x{ae}|\x{e2}\x{80}\x{a6})+$/i){
+# print "$file\n";
+# $file=~ s/[&a-z\.\/_ \-0-9\(\)\[\],:'!"\?@;]|\x{c4}\x{83}|\x{c5}\x{9e}|\x{c5}\x{9f}|\x{c3}\x{a2}|\x{c3}\x{a8}|\x{c3}\x{a9}|\x{c3}\x{a4}|\x{c8}\x{9b}|\x{c8}\x{99}|\x{c5}\x{a2}|\x{c3}\x{8e}|\x{c3}\x{a5}|\x{c3}\x{85}|\x{c3}\x{bc}|\x{e2}\x{82}\x{ac}|\x{e2}\x{80}\x{99}|\x{c3}\x{a1}|\x{c3}\x{ba}|\x{c5}\x{a1}|\x{c5}\x{a0}|\x{c3}\x{a0}|\x{c3}\x{ae}|\x{e2}\x{80}\x{a6}//gi;
+# die "\nERROR WWW\n_$file\_\n";
+# };
 
 	print "$count\r" if ++$count % 10 == 0;
 	$file = abs_path($file);
