@@ -239,7 +239,7 @@ sub doc_find_unknown_elements {
     Common::my_print "\t".(++$counter)." Find unknown elements.\n";
     foreach my $a_tag ($tree->descendants()) {
 	die "Unknown tag: ".$a_tag->tag."\n" if $a_tag->tag !~ m/^h[0-9]{1,2}$/ &&
-	      $a_tag->tag !~ m/^(head|meta|font|p|div|br|a|dd|dl|dt|table|td|tr|title|i|img|span|sup|body|style|b|u|ul|ol|li|center|hr)$/;
+	      $a_tag->tag !~ m/^(head|meta|font|p|div|br|a|dd|dl|dt|table|td|tr|title|i|img|span|sup|body|style|b|u|ul|ol|li|center|hr|blockquote|strike)$/;
     }
     return $tree;
 }
@@ -535,6 +535,7 @@ sub doc_tree_clean_span {
 				    || $att =~ m/^\s*font-variant: (small-caps|normal)\s*$/i
 				    || $att =~ m/^\s*position: absolute\s*$/i
 				    || $att =~ m/^\s*(top|left|right): -?[0-9]{1,}(\.[0-9]{1,})?in\s*$/i
+				    || $att =~ m/^\s*margin-(right): -?[0-9]{1,}(\.[0-9]{1,})?in\s*$/i
 				    || $att =~ m/^\s*(border|padding)/i
 				    || $att =~ m/^\s*font-family:/i
 				    || $att =~ m/^\s*so-language: /i
@@ -756,10 +757,12 @@ sub clean_html_from_oo {
     $tree = doc_find_unknown_elements($tree);
     };
     my $msg = $@;
+
     $html = $tree->as_HTML('<>&', "\t") || die "can't get html from tree\n";
     $tree = $tree->delete();
 #     first clean up and after that die
     die Dumper($msg) if ($msg);
+    $txt1 =~ s/\s+/\n/gm;$txt2 =~ s/\s+/\n/gm;
     if ($txt1 ne $txt2) {
 	$txt1 =~ s/,/\n/g;    $txt2 =~ s/,/\n/g;
 	Common::write_file("$work_dir/html2.html", $html);
