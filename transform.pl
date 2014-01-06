@@ -6,8 +6,8 @@ $SIG{__WARN__} = sub { die @_ };
 # #     get utf8 codes from http://www.fileformat.info/info/unicode/char/25cb/index.htm
 # perl -e 'print sprintf("\\x{%x}", $_) foreach (unpack("C*", "Ó"));print"\n"'
 
-#ubuntu:libdbi-perl perltidy libhtml-tidy-perl libcss-tiny-perl libhtml-treebuilder-xpath-perl libarchive-zip-perl libxml-simple-perl libdevel-size-perl
-#fedora: perl-URI perl-HTML-Tidy perl-CSS-Tiny perl-HTML-Tree perl-Devel-Size perl-DBD-SQLite
+#ubuntu:libdbi-perl perltidy libhtml-tidy-perl libcss-tiny-perl libhtml-treebuilder-xpath-perl libarchive-zip-perl libxml-simple-perl libdevel-size-perl libdbd-sqlite3-perl imagemagick
+#fedora: perl-URI perl-HTML-Tidy perl-CSS-Tiny perl-HTML-Tree perl-Devel-Size perl-DBD-SQLite imagemagick
 
 use Cwd 'abs_path';
 use File::Basename;
@@ -41,8 +41,9 @@ use Carti::Common;
 my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
 my $extra_tools_dir = "$script_dir/tools";
 
-my $libreoo_path = "/opt/libreoffice4.0/program/soffice";
+# my $libreoo_path = "/opt/libreoffice4.0/program/soffice";
 # my $libreoo_path = "/opt/lodev4.0/program/soffice";
+my $libreoo_path = "/usr/bin/soffice";
 my $libreoo_home = $ENV{'HOME'}."/.config/libreoffice/";
 my $libreoo_config = $ENV{'HOME'}."/.config/libreoffice/4/user/basic/Standard/";
 # my $libreoo_home = $ENV{'HOME'}."/.libreoffice/";
@@ -537,7 +538,7 @@ sub html_to_epub {
     push @tags, "ver=".$book->{'ver'} if $book->{'ver'};
 
     my $epub_command = "$extra_tools_dir/calibre/ebook-convert";
-    my $epub_parameters = "--disable-font-rescaling --minimum-line-height=0 --toc-threshold=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=sony300 --max-toc-links=0 --language=ro --authors=\"".(decode_utf8($authors))."\" --title=\"".(decode_utf8($title))."\"";
+    my $epub_parameters = "--disable-font-rescaling --minimum-line-height=0 --toc-threshold=0 --smarten-punctuation --chapter=\"//*[(name()='h1' or name()='h2' or name()='h3' or name()='h4' or name()='h5')]\" --input-profile=default --output-profile=nook --max-toc-links=0 --language=ro --authors=\"".(decode_utf8($authors))."\" --title=\"".(decode_utf8($title))."\"";
 # --keep-ligatures --rating=between 1 and 5
     $epub_parameters .= " --tags=\"".(join ',', @tags)."\"" if scalar @tags;
     $epub_parameters .= " --series=\"".(decode_utf8($book->{'seria'}))."\" --series-index=\"$book->{'seria_no'}"."\"" if $book->{'seria'} && $book->{'seria_no'};

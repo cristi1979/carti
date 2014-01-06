@@ -1,6 +1,6 @@
 #!/bin/bash
 INDEX_FILE=index
-DIR=$1
+DIR=$(dirname $(readlink -f $1))
 TMP_DIR_Q="$DIR/tmp"
 
 while IFS= read -r FILE; do
@@ -21,7 +21,8 @@ while IFS= read -r FILE; do
   ~/programe/calibre/ebook-convert "$TMP_DIR/$filename.$extension" "$TMP_DIR/$filename.htmlz" --no-chapters-in-toc --toc-threshold=0 --max-toc-links=0 --htmlz-css-type=tag --htmlz-class-style=inline
   cd "$TMP_DIR"
   unzip "$filename.htmlz"
-  libreoffice --headless --invisible --nocrashreport --nodefault --nologo --nofirststartwizard --norestore "macro:///Standard.Module1.embedImagesInWriter($TMP_DIR/index.html)"
+  echo "make odt"
+  libreoffice --nocrashreport --nodefault --nologo --nofirststartwizard --norestore "macro:///Standard.Module1.embedImagesInWriter($TMP_DIR/index.html)" || exit 1
   #libreoffice3.6 --writer --headless --invisible --nocrashreport --nodefault --nologo --nofirststartwizard --norestore "macro:///Standard.Module1.embedImagesInWriter($TMP_DIR/index.html)"
   mv "$TMP_DIR/index.odt" "$TMP_DIR/$filename.odt"
   rm "$TMP_DIR/$filename.$extension"

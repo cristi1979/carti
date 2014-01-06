@@ -18,34 +18,15 @@ use Term::ANSIColor;
 #apps: mplayer ffmpeg mencoder mkvtoolnix HanBrakeCLI
 
 my $path_prefix = abs_path(shift);
+print "Path is $path_prefix.\n";
 my $arg = shift || "";
 
-# print Dumper($arg);
 # my $bkp_path = "/media/ceva1/Audio/aaa__de_sters/bkp";
 # my $bkp_srt_path = "/media/ceva2/Video/bkp_srt";
 my $bkp_path = "./bkp";
 my $bkp_srt_path = "$bkp_path/../bkp_srt";
 my $movies = {};
 my $force_subtitles = "no";
-my $audio_only = "no";
-my $video_only = "no";
-if ($arg =~ m/\-m/i ) {
-  # make mkv only
-  $audio_only = "no";
-  $video_only = "yes";
-} elsif ($arg =~ m/\-a/i ) {
-  # audio
-  $audio_only = "yes";
-  $video_only = "no";
-} elsif ($arg =~ m/\-s/i ) {
-  # subtitles
-  $audio_only = "yes";
-  $video_only = "yes";
-} elsif ($arg =~ m/\-sn/i ) {
-  # subtitles
-  $audio_only = "yes";
-  $video_only = "yes";
-}
 
 sub normalize_text {
     use Unicode::Normalize 'NFD','NFC','NFKD','NFKC';
@@ -170,7 +151,7 @@ sub work_on_subtitle {
     close MYFILE;
 
     my @to_move = ();
-    my $fontsize = sprintf "%.0f", 6/100*sqrt($w*$w+$h*$h);
+    my $fontsize = sprintf "%.0f", 3.3/100*sqrt($w*$w+$h*$h);
     my $header = '[Script Info]
 ; This script was created by subtitleeditor (0.38.0)
 ; http://home.gna.org/subtitleeditor/
@@ -277,10 +258,9 @@ sub work_on_audio {
 # return $audio_file;
     print color("green"), "\t\t*** Audio info: codec=$acodec, format=$aformat.\n", color 'reset';
     die "Unknown audio codec: $acodec $info->{ID_AUDIO_FORMAT}.\n" if defined $acodec && ($acodec ne "mp3" && $acodec ne "ffac3" && $acodec ne "alaw" && $acodec ne "ffdca" && $acodec ne "ffwmav2" && $acodec ne "pcm" && $acodec ne "ffadpcmimaqt" && ($acodec ne "faad" && $aformat eq "MP4A") && ($acodec ne "ffaac" && $aformat eq "MP4A"));
-    return $audio_file if $video_only eq "yes";
     unlink $audio_file if -f $audio_file;
 
-    if (1==0 && ($acodec eq "faad" || $acodec eq "ffaac") && $aformat eq "MP4A" && ($arate == 48000 || $arate == 44100 || $arate == 32000 || $arate == 22050)){
+    if ( ($acodec eq "faad" || $acodec eq "ffaac") && $aformat eq "MP4A" && ($arate == 48000 || $arate == 44100 || $arate == 32000 || $arate == 22050) ){
 	print color("green"), "\t\t*** Copy audio with parameters $movie, $audio_file.\n", color 'reset';
 # 	system("mplayer", "-dumpaudio", "-dumpfile", "$audio_file", "$movie") == 0 or die "audio encoding failed (copy): $!\n";
 	system("ffmpeg", "-i", "$movie", "-acodec", "copy", "$audio_file") == 0 or die "audio encoding failed: $!\n";  ## for mp4
@@ -288,6 +268,9 @@ sub work_on_audio {
 	print color("green"), "\t\t*** Transcoding audio with parameters $movie, $audio_file.\n", color 'reset';
 	system("bash", "-c", "mplayer -alang eng -srate 48000 -nocorrect-pts -ao pcm:fast:file=>\($script_dir/nero/neroAacEnc -if - -of \"$audio_file\" 2>/dev/null\) -vo null -vc null \"$movie\"") == 0 or die "audio encoding failed (transcode): $!. From $movie to $audio_file.\n".Dumper("bash", "-c", "mplayer -srate 48000 -nocorrect-pts -ao pcm:fast:file=>\($script_dir/nero/neroAacEnc -if - -of \"$audio_file\" 2>/dev/null\) -vo null -vc null \"$movie\"");
     }
+# avconv -i Rio\ \(2011\)\ \ BluRay\ \(Dublat\ Romana\).mkv coco.wav
+# avconv -i audio.ac3 coco.wav
+# faac -o audio.aac audiodump.wav
 
     return $audio_file;
 }
@@ -295,53 +278,32 @@ sub work_on_audio {
 sub work_on_video {
     my ($movie, $info,$srt) = @_;
     my ($name,$dir,$suffix) = fileparse($movie, qr/\.[^.]*/);
-    my $video_file = "$dir/_$name.mp4";
+#     my $video_file = "$dir/_$name.mp4";
+    my $output_file = "$dir/$name.mp4";
 
     my $demuxer = $info->{ID_DEMUXER};
     my $vcodec = $info->{ID_VIDEO_CODEC};
     die "Unknown video codec: $vcodec $info->{ID_VIDEO_FORMAT}.\n" if ($vcodec ne "ffwmv2" && $vcodec ne "ffodivx" && $vcodec ne "ffdivx" && $vcodec ne "ffmpeg1" && $vcodec ne "ffmpeg2" && $vcodec ne "ffmp41" && $vcodec ne "ffmp42" && $vcodec ne "ffcvid" && $vcodec ne "ffsvq3" && $vcodec ne "ffflv" && $vcodec ne "ffwmv3" && $vcodec ne "ffh264" && $vcodec ne "ffindeo5" && $vcodec ne "ffh263" && $vcodec ne "ffmjpeg");
 
-    my @mkv_opts = ("mkvmerge", "-o", "$video_file.mkv", "$video_file");
     my ($w, $h, $crop, @HB_opts) = get_video_size($info, $movie);
 
-    my $filetoencode = "$video_file";
-    return $filetoencode if $audio_only eq "yes";
+#     my $filetoencode = $movie;
 
-    if ($vcodec eq "ffh264" && $info->{ID_VIDEO_FORMAT} eq 'H264') {
-	print color("green"), "\t\t*** Copy video with parameters $movie, $filetoencode.\n", color 'reset';
-	if ($demuxer eq "avi") {
-	    system("mencoder", "-idx", "-ovc", "copy", "-nosound", "$movie", "-o", "$filetoencode") == 0 or die "can't run mencoder:$?.\n";
-	} else {
-	    system("ffmpeg", "-f", "mp4", "-an", "-i", "$movie", "-vcodec", "copy", "$filetoencode") == 0 or die "can't run ffmpeg:$?.\n";
-	}
-	return $filetoencode;
-    }
+#     if ($vcodec eq "ffh264" && $info->{ID_VIDEO_FORMAT} eq 'H264') {
+# 	print color("green"), "\t\t*** Copy video with parameters $movie, $filetoencode.\n", color 'reset';
+# 	if ($demuxer eq "avi") {
+# 	    system("qqmencoder", "-idx", "-ovc", "copy", "-nosound", "$movie", "-o", "$filetoencode") == 0 or die "can't run qqmencoder:$?.\n";
+# 	} else {
+# 	    system("qqffmpeg", "-f", "mp4", "-an", "-i", "$movie", "-vcodec", "copy", "$filetoencode") == 0 or die "can't run qqffmpeg:$?.\n";
+# 	}
+# 	return $filetoencode;
+#     }
 
 
-    print color("green"), "\t\t*** Dumping video with parameters $movie, $video_file.\n", color 'reset';
-    system("mencoder", "-idx", "-ovc", "copy", "-nosound", "$movie", "-o", "$video_file") == 0 or die "can't run mencoder:$?.\n";
+#     print color("green"), "\t\t*** Dumping video with parameters $movie, $video_file.\n", color 'reset';
+#     system("qqmencoder", "-idx", "-ovc", "copy", "-nosound", "$movie", "-o", "$video_file") == 0 or die "can't run qqmencoder:$?.\n";
 
-#     if ($suffix !~ m/flv/i && scalar @mkv_opts) {
-    if ($srt ne ""){
-	$filetoencode = "$video_file.mkv" ;
-	print color("green"), "\t\t*** Making mkv with parameters $video_file.mkv, $video_file.\n", color 'reset';
-	system(@mkv_opts, "$srt", "--attach-file", "$script_dir/DejaVuSans.ttf") == 0 or die "error running mkvmerge: $?.\n";
-	die "mkvmerge failed: $!\n" if ( $? == -1 || ! -f "$filetoencode");
-	push @HB_opts, ("-s", "1", "--subtitle-burn");
-    } else {
-	print "\tNo subtitles.\n";
-	move($video_file, "$video_file.video");
-	$filetoencode = "$video_file.video";
-	die if $force_subtitles eq "yes";
-    }
 
-    if ($arg =~ m/\-m/i) {
-	print "remove $video_file.\n";
-	unlink $video_file || die "delete $video_file: $!\n" if -f $video_file;
-	return;
-    } elsif ($arg =~ m/\-s/i) {
-	return;
-    }
 #     my @ultrafast_settings = ("-q", "25", "-x", "no-8x8dct=1:aq-mode=0:b-adapt=0:bframes=0:no-cabac=1:no-deblock=1:no-mbtree=1:me=dia:no-mixed-refs=1:partitions=none:ref=1:scenecut=0:subme=0:trellis=0:no-weightb=1:weightp=0");
 #     my @slower_settings = ("-q", "17", "-x", "b-adapt=2:direct=auto:me=umh:rc-lookahead=60:ref=8:subme=9:partitions=all:trellis=2:psy-rd=1\|0.15:deblock=-1\|-1");
 #     my @slow_settings = ("-q", "25", "-x", "b-adapt=2:rc-lookahead=50:direct=auto");
@@ -349,16 +311,17 @@ sub work_on_video {
 #     my @gray_settings = ("-g");
     my @x264_settings = ("-q", "25", "-x", "b-adapt=2:direct=auto:me=umh:rc-lookahead=50:ref=5:subme=8:psy-rd=1\|0.15:deblock=-1\|-1:analyse=all:no-fast-pskip=1:no-dct-decimate=1");
 #     , "--detelecine"
-    print color("green"), "\t\t*** Transcoding video with parameters $filetoencode, $video_file.\n", color 'reset';
-    my @handbrake = ("HandBrakeCLI", "--decomb", "--keep-display-aspect", "--loose-anamorphic", "-f", "mp4", "-e", "x264", "-O", "-4", "-i", "$filetoencode", "-o", "$video_file", "--audio", "none", @HB_opts, @x264_settings);
+    print color("green"), "\t\t*** Transcoding file $movie.\n", color 'reset';
+#     my @handbrake = ("HandBrakeCLI", "--decomb", "--keep-display-aspect", "--loose-anamorphic", "-f", "mp4", "-e", "x264", "-O", "-4", "-i", "$filetoencode", "-o", "$video_file", "--audio", "none", @HB_opts, @x264_settings);
+    my @handbrake = ("HandBrakeCLI", "--decomb", "--keep-display-aspect", "--loose-anamorphic", "-f", "mp4", "-e", "x264", "-O", "-4", "-i", "$movie", "-o", "$output_file", "--aencoder", "ffaac", "--aencoder", "44.1", @HB_opts, @x264_settings);
     system(@handbrake) == 0 or die "error running handbrake: $?.\n";
-    unlink "$filetoencode" || die "delete mkv: $!\n" if -f "$filetoencode";
+#     unlink "$filetoencode" || die "delete mkv: $!\n" if -f "$filetoencode";
 
-    return $video_file;
+    return $output_file;
 }
 
 sub work_on_file {
-    my ($movie, $info) = @_;
+    my ($movie, $info, @HB_opts) = @_;
     my $tmp = $movie;
     $tmp =~ s/(,|")//mgs;
     if ($tmp ne $movie) {
@@ -371,19 +334,46 @@ sub work_on_file {
     if (! -d "$bkp_path/$name") {mkpath("$bkp_path/$name") || die "mkdir $bkp_path/$name: $!\n";}
     if (! -d "$bkp_srt_path/$name") {mkpath("$bkp_srt_path/$name") || die "mkdir $bkp_srt_path/$name: $!\n";}
 
-    return if $arg =~ m/\-m/i && -f "_$name.mp4.mkv";
+    die "bleah\n" if -f "_$name.mp4.mkv";
 # return;
     my $srt = work_on_subtitle($movie, $info);
-    my $audio = work_on_audio($movie, $info);
-    my $video = work_on_video($movie, $info, $srt);
-    return if $arg =~ m/\-[m|s]/i;
+    
+    my $video_file = "$dir/$name.mkv";
+    if ($suffix =~ m/^\.mkv$/i) {
+      print 1
+    } else {
+      print 3
+    }
+    my @mkv_opts = ("mkvmerge", "-o", "$video_file.mkv", "$video_file");
+#     if ($suffix !~ m/flv/i && scalar @mkv_opts) {
+    if ($srt ne ""){
+	my $filetoencode = "$video_file.mkv" ;
+	print color("green"), "\t\t*** Making mkv with parameters $video_file.mkv, $video_file.\n", color 'reset';
+	system(@mkv_opts, "$srt", "--attach-file", "$script_dir/DejaVuSans.ttf") == 0 or die "error running mkvmerge: $?.\n";
+	die "mkvmerge failed: $!\n" if ( $? == -1 || ! -f "$filetoencode");
+	push @HB_opts, ("-s", "1", "--subtitle-burn");
+    } else {
+	print "\tNo subtitles.\n";
+# 	move($video_file, "$video_file.video");
+# 	$filetoencode = "$video_file.video";
+	die if $force_subtitles eq "yes";
+    }
+
+#     my $audio = work_on_audio($movie, $info);
+    my $video = work_on_video($movie, $info, $srt, @HB_opts);
+    
+## merge videos:
+# mencoder -oac copy -ovc copy The\ Twelve\ Chairs\ \(AC3-2ch\)\ \(1of2\).avi The\ Twelve\ Chairs\ \(AC3-2ch\)\ \(2of2\).avi -o The\ Twelve\ Chairs.avi
+
+    
+    
 #     ISO:
 #     copy all VOBs
 # mencoder dvd://10 -dvd-device $PATH_TO_ISO.iso -oac copy -channels 6 -o audio -ovc frameno
 ## extract chapter
 # mplayer dvd://43 -dvd-device $PATH_TO_ISO.iso -chapter 4
 #     cat 1.vob 2.vob ... > 0.vob
-#     mkvmerge -o coco.mkv 0.vos sub.ssa
+#     mkvmerge -o coco.mkv 0.vob sub.ssa
 #     HandBrakeCLI -5 -e x264 -q 0.6 -f mp4 --rate 25 -O -4 -s 1 --subtitle-burn -2 -T -a 1 --aencoder copy:ac3  -i coco.mkv -o file.mp4
 
 # FILE=some.iso
@@ -432,23 +422,21 @@ sub work_on_file {
 # return;
     move ($movie, "$movie.original");
     $movie = "$movie.original";
-    sleep 25;
-    die "no audio: $audio\n" if ! -f "$audio";
-    die "no video: $video\n" if ! -f "$video";
-    print color("green"), "\t\t*** Joining audio and video with parameters $audio, $video, $dir/$name.mp4.\n", color 'reset';
+#     sleep 25;
+#     die "no audio: $audio\n" if ! -f "$audio";
+#     die "no video: $video\n" if ! -f "$video";
+#     print color("green"), "\t\t*** Joining audio and video with parameters $video, $dir/$name.mp4.\n", color 'reset';
 #     system("ffmpeg", "-i", "$audio", "-acodec", "copy", "-i", "$video", "-vcodec", "copy", "$dir/$name.mp4") == 0 or die "error running ffmpeg: $?.\n";
-    my $output = `ffmpeg -i "$audio" -acodec copy -i "$video" -vcodec copy "$dir/$name.mp4" 2>&1`;
-    if ( $? || $output =~ m/\[mov,mp4,m4a,3gp,3g2,mj2 @ (.*?)\] stream 0, offset (.*?): partial file/ ) {
-	print "Joining failed:\n$output.\n";
-	return;
-    }
+#     my $output = `11ffmpeg -i "audio" -acodec copy -i "$video" -vcodec copy "$dir/$name.mp4" 2>&1`;
+#     if ( $? || $output =~ m/\[mov,mp4,m4a,3gp,3g2,mj2 @ (.*?)\] stream 0, offset (.*?): partial file/ ) {
+# 	print "Joining failed:\n$output.\n";
+# 	return;
+#     }
 
-    my $audio_size = -s "$audio" || 0;
-    my $video_size = -s "$video" || 0;
-    my $final_size = -s "$dir/$name.mp4" || 0;
+#     my $video_size = -s "$video" || 0;
+#     my $final_size = -s "$dir/$name.mp4" || 0;
 #     print color("green"), "\t\t*** Size of files: $audio_size + $video_size = ".($audio_size + $video_size)." final = $final_size.\nProcent:".($final_size*100/($audio_size + $video_size))."\n", color 'reset';
 # exit 1;
-    unlink "$audio" || die "delete audio: $!\n" if -f "$audio";
     unlink "$video" || die "delete video: $!\n" if -f "$video";
 #     unlink "$movie";
     unlink "$srt";
@@ -459,13 +447,20 @@ sub work_on_file {
 sub extract_mkv {
     my $file = shift;
     my ($name,$dir,$suffix) = fileparse($file, qr/\.[^.]*/);
-    my $nr_tracks = `mkvinfo "$file" | grep "Track number:" | sort | tail -1 | sed "s/|  + Track number: //"`;
+    my $nr_tracks = `mkvinfo "$file" | grep "Track number:" | tail -1 | gawk '{print \$5}'`;
     my $tracks = "";
-    for (my $i=1;$i<=$nr_tracks;$i++) {
-	$tracks .= " $i:\"$file\".$i "
+    my $files = {};
+    for (my $i=0;$i<=$nr_tracks-1;$i++) {
+	$tracks .= " $i:\"$file\".$i ";
+# 	$files->{$i} = "$file.$i";
     }
     print "$tracks\n";
     `mkvextract tracks "$file" $tracks`;
+#     for (keys %$files) {
+#         delete $files->{$_};
+#     }
+#     print Dumper($files);
+#     exit 1;
 }
 
 sub add_document {
@@ -486,9 +481,9 @@ sub add_document {
     }
 
     $movies->{$info->{ID_FILENAME}} = $info;
-    work_on_file($info->{ID_FILENAME}, $info);
 #     extract_mkv($file) if $suffix =~ m/^\.mkv$/i;
+    work_on_file($info->{ID_FILENAME}, $info);
 }
 
-find ({ wanted => sub { add_document ($File::Find::name) if -f && (/(\.avi|\.mpg|\.mpeg|\.flv|\.wmv|\.mov|\.3gp|\.ogm|\.divx|\.3gp|\.ogm|\._iso_|\._mp4_|\.mkv)$/i) }}, $path_prefix ) if  (-d "$path_prefix");
+find ({ wanted => sub { add_document ($File::Find::name) if -f && (/(\.avi|\.mpg|\.mpeg|\.flv|\.wmv|\.mov|\.3gp|\.ogm|\.divx|\.3gp|\.ogm|\._iso|\.mp4|\.mkv|\.m4v)$/i) }}, $path_prefix ) if  (-d $path_prefix);
 #find ({ wanted => sub { add_document ($File::Find::name) if -f && (/(\.mp4)$/i) }}, $path_prefix ) if  (-d "$path_prefix");
