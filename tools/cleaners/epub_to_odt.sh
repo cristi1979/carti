@@ -1,6 +1,6 @@
 #!/bin/bash
 INDEX_FILE=index
-DIR=$(dirname $(readlink -f $1))
+DIR=$(readlink -f $1)
 TMP_DIR_Q="$DIR/tmp"
 
 while IFS= read -r FILE; do

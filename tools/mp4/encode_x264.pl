@@ -168,7 +168,9 @@ Format: Layer, Start, End, Style, Actor, MarginL, MarginR, MarginV, Effect, Text
 ';
 
     print color("green"), "\t\t*** Dropping subtitles with parameters $utf8_file_name, $movie.\n", color 'reset';
-    `mplayer -sub "$utf8_file_name" -subcp utf8 -dumpsrtsub -vo null -ao null -frames 0 "$movie" 2>/dev/null`;
+   `avconv -scodec srt -i "$utf8_file_name" "$ass_file_name"`;
+   return $ass_file_name;
+   `mplayer -sub "$utf8_file_name" -subcp utf8 -dumpsrtsub -vo null -ao null -frames 0 "$movie" 2>/dev/null`;
     die "Dropping subtitles failed.\n" if $?;
 
     if ($arg =~ m/\-sn/i ) {
@@ -185,9 +187,9 @@ Format: Layer, Start, End, Style, Actor, MarginL, MarginR, MarginV, Effect, Text
 	print MYFILE $q;
 	close MYFILE;
     }
-
     unlink "$name.mplayer.srt" if -f "$name.mplayer.srt";
     copy("dumpsub.srt", "$name.mplayer.srt") or die "Copy failed: $!";
+
     push @to_move, "$dir/$name.original$suffix";
     push @to_move, "$utf8_file_name";
     push @to_move, "$sub_file_name" if $sub_file_name ne $ass_file_name;
