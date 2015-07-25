@@ -120,41 +120,9 @@ sub get_video_size {
     return ($w, $h, $crops[1], @extra_opts);
 }
 
-sub work_on_subtitle {
-    my ($movie, $info) = @_;
-    my ($w, $h, $crop) = get_video_size($info, $movie);
-    my $sub_file_name = $info->{ID_FILE_SUB_FILENAME} if exists $info->{ID_FILE_SUB_FILENAME};
-    return "" if ! defined $sub_file_name;
-
-    my $tmp = $sub_file_name;
-    $tmp =~ s/(,|")//mgs;
-    if ($tmp ne $movie) {
-	move("$sub_file_name","$tmp") || die "mv srt 2: $!\n";
-	$sub_file_name = $tmp;
-    }
-
-    my ($name,$dir,$suffix) = fileparse($sub_file_name, qr/\.[^.]*/);
-    copy("$sub_file_name","$bkp_path/$name/") || die "cp srt1 ($sub_file_name to $bkp_path/$name): $!\n";
-
-    my ($ass_file_name, $original_file_name) = ("$dir$name.ass", "$dir$name.original$suffix");
-    copy("$sub_file_name", "$original_file_name") or die "Copy failed: $! ($sub_file_name to $original_file_name)\n";
-
-    my $utf8_file_name = "$dir/$name.utf8$suffix";
-    open(MYINPUTFILE, "<$sub_file_name"); # open for input
-    my(@lines) = <MYINPUTFILE>; # read file into list
-    close(MYINPUTFILE);
-
-    $tmp = join "", @lines;
-    Encode::from_to($tmp, "cp1250", "utf8") if (get_encoding($tmp) ne "utf8" );
-    open MYFILE, ">$utf8_file_name";
-    print MYFILE $tmp;
-    close MYFILE;
-
-    my @to_move = ();
-    my $fontsize = sprintf "%.0f", 3.3/100*sqrt($w*$w+$h*$h);
+sub write_ass {
+    my ($ass_file_name, $w, $h, $fontsize, $crop) = @_;
     my $header = '[Script Info]
-; This script was created by subtitleeditor (0.38.0)
-; http://home.gna.org/subtitleeditor/
 ScriptType: V4.00+
 PlayResX: '.$w.'
 PlayResY: '.$h.'
@@ -167,36 +135,6 @@ Style: Default,DejaVuSans,'.$fontsize.',&H00FFFFFF,&H0000FFFF,&H00000000,&H00000
 Format: Layer, Start, End, Style, Actor, MarginL, MarginR, MarginV, Effect, Text
 ';
 
-    print color("green"), "\t\t*** Dropping subtitles with parameters $utf8_file_name, $movie.\n", color 'reset';
-   `avconv -scodec srt -i "$utf8_file_name" "$ass_file_name"`;
-   return $ass_file_name;
-   `mplayer -sub "$utf8_file_name" -subcp utf8 -dumpsrtsub -vo null -ao null -frames 0 "$movie" 2>/dev/null`;
-    die "Dropping subtitles failed.\n" if $?;
-
-    if ($arg =~ m/\-sn/i ) {
-	## normalize subtitle
-	my $string;
-	{  local $/=undef;
-	  open FILE, "$dir/dumpsub.srt" or die "Couldn't open file: $!";
-	  binmode FILE;
-	  $string = <FILE>;
-	  close FILE;
-	}
-	my $q = normalize_text($string);
-	open MYFILE, ">$dir/$name.normalize$suffix";
-	print MYFILE $q;
-	close MYFILE;
-    }
-    unlink "$name.mplayer.srt" if -f "$name.mplayer.srt";
-    copy("dumpsub.srt", "$name.mplayer.srt") or die "Copy failed: $!";
-
-    push @to_move, "$dir/$name.original$suffix";
-    push @to_move, "$utf8_file_name";
-    push @to_move, "$sub_file_name" if $sub_file_name ne $ass_file_name;
-    push @to_move, "$dir/$name.mplayer.srt";
-
-    rename("dumpsub.srt", "$ass_file_name");
-    die "can't make srt.\n" if ! -s "$ass_file_name";
     my $txt = "";
     my $srt;
     open $srt, "<" . $ass_file_name;
@@ -233,6 +171,92 @@ Format: Layer, Start, End, Style, Actor, MarginL, MarginR, MarginV, Effect, Text
     close MYFILE;
     die "can't make srt.\n" if ! -s "$ass_file_name";
 
+}
+
+sub work_on_subtitle {
+    my ($movie, $info) = @_;
+    my ($w, $h, $crop) = get_video_size($info, $movie);
+    my $sub_file_name = $info->{ID_FILE_SUB_FILENAME} if exists $info->{ID_FILE_SUB_FILENAME};
+    return "" if ! defined $sub_file_name;
+
+    my $tmp = $sub_file_name;
+    $tmp =~ s/(,|")//mgs;
+    if ($tmp ne $movie) {
+	move("$sub_file_name","$tmp") || die "mv srt 2: $!\n";
+	$sub_file_name = $tmp;
+    }
+
+    my ($name,$dir,$suffix) = fileparse($sub_file_name, qr/\.[^.]*/);
+    copy("$sub_file_name","$bkp_path/$name/") || die "cp srt1 ($sub_file_name to $bkp_path/$name): $!\n";
+
+    my ($ass_file_name, $original_file_name) = ("$dir$name.ass", "$dir$name.original$suffix");
+    copy("$sub_file_name", "$original_file_name") or die "Copy failed: $! ($sub_file_name to $original_file_name)\n";
+
+    # transform to utf8
+    my $utf8_file_name = "$dir/$name.utf8$suffix";
+    open(MYINPUTFILE, "<$sub_file_name"); # open for input
+    my(@lines) = <MYINPUTFILE>; # read file into list
+    close(MYINPUTFILE);
+    $tmp = join "", @lines;
+    Encode::from_to($tmp, "cp1250", "utf8") if (get_encoding($tmp) ne "utf8" );
+    open MYFILE, ">$utf8_file_name";
+    print MYFILE $tmp;
+    close MYFILE;
+
+    if ($arg =~ m/\-sn/i ) {
+	## normalize subtitle
+	my $string;
+	{  local $/=undef;
+	  open FILE, "$dir/dumpsub.srt" or die "Couldn't open file: $!";
+	  binmode FILE;
+	  $string = <FILE>;
+	  close FILE;
+	}
+	my $q = normalize_text($string);
+	open MYFILE, ">$dir/$name.normalize$suffix";
+	print MYFILE $q;
+	close MYFILE;
+    }
+
+    my @to_move = ();
+    my $fontsize = sprintf "%.0f", 3.3/100*sqrt($w*$w+$h*$h);
+    my $header = '[Script Info]
+ScriptType: V4.00+
+PlayResX: '.$w.'
+PlayResY: '.$h.'
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVuSans,'.$fontsize.',&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,1,2,2,5,5,'.(15+$crop).',0
+';
+
+    if (! -s "$ass_file_name") {
+      print color("green"), "\t\t*** Dropping subtitles with parameters $utf8_file_name, $movie.\n", color 'reset';
+    `avconv -scodec srt -i "$utf8_file_name" "$ass_file_name" 1>/dev/null`;
+      die "Dropping subtitles failed.\n" if $?;
+    }
+
+    my $srt;
+    open $srt, "<" . "$ass_file_name";
+    my $read = 0;
+    my $txt = "$header";
+    while(<$srt>) {
+	my $line = $_;
+	chomp $line;
+	$read = 1 if ($line =~ m/^\[Events\]\s*/);
+	if ($read) {
+	  $txt .= "$line\n";
+	}
+    }
+    close $srt;
+
+    open MYFILE, ">$ass_file_name";
+    print MYFILE $txt;
+    close MYFILE;
+
+    push @to_move, "$dir/$name.original$suffix";
+    push @to_move, "$utf8_file_name";
+    push @to_move, "$sub_file_name" if $sub_file_name ne $ass_file_name;
     foreach (@to_move) {
 	move("$_","$bkp_srt_path/$name/") || die "mv srt 1 $_: $!\n";
     }
@@ -270,7 +294,6 @@ sub work_on_audio {
 	print color("green"), "\t\t*** Transcoding audio with parameters $movie, $audio_file.\n", color 'reset';
 	system("bash", "-c", "mplayer -alang eng -srate 48000 -nocorrect-pts -ao pcm:fast:file=>\($script_dir/nero/neroAacEnc -if - -of \"$audio_file\" 2>/dev/null\) -vo null -vc null \"$movie\"") == 0 or die "audio encoding failed (transcode): $!. From $movie to $audio_file.\n".Dumper("bash", "-c", "mplayer -srate 48000 -nocorrect-pts -ao pcm:fast:file=>\($script_dir/nero/neroAacEnc -if - -of \"$audio_file\" 2>/dev/null\) -vo null -vc null \"$movie\"");
     }
-# avconv -i Rio\ \(2011\)\ \ BluRay\ \(Dublat\ Romana\).mkv coco.wav
 # avconv -i audio.ac3 coco.wav
 # faac -o audio.aac audiodump.wav
 
@@ -337,22 +360,14 @@ sub work_on_file {
     if (! -d "$bkp_srt_path/$name") {mkpath("$bkp_srt_path/$name") || die "mkdir $bkp_srt_path/$name: $!\n";}
 
     die "bleah\n" if -f "_$name.mp4.mkv";
-# return;
+
     my $srt = work_on_subtitle($movie, $info);
     
     my $video_file = "$dir/$name.mkv";
-    if ($suffix =~ m/^\.mkv$/i) {
-      print 1
-    } else {
-      print 3
-    }
-    my @mkv_opts = ("mkvmerge", "-o", "$video_file.mkv", "$video_file");
+    my @mkv_opts = ("mkvmerge", "-o", "$video_file", "$movie");
 #     if ($suffix !~ m/flv/i && scalar @mkv_opts) {
     if ($srt ne ""){
-	my $filetoencode = "$video_file.mkv" ;
-	print color("green"), "\t\t*** Making mkv with parameters $video_file.mkv, $video_file.\n", color 'reset';
-	system(@mkv_opts, "$srt", "--attach-file", "$script_dir/DejaVuSans.ttf") == 0 or die "error running mkvmerge: $?.\n";
-	die "mkvmerge failed: $!\n" if ( $? == -1 || ! -f "$filetoencode");
+	push @mkv_opts, ("$srt", "--attach-file", "$script_dir/DejaVuSans.ttf");
 	push @HB_opts, ("-s", "1", "--subtitle-burn");
     } else {
 	print "\tNo subtitles.\n";
@@ -361,8 +376,12 @@ sub work_on_file {
 	die if $force_subtitles eq "yes";
     }
 
+    print color("green"), "\t\t*** Making mkv with parameters $video_file, $video_file.\n", color 'reset';
+    system(@mkv_opts) == 0 or die "error running mkvmerge: $?.\n";
+    die "mkvmerge failed: $!\n" if ( $? == -1 || ! -f "$video_file");
+
 #     my $audio = work_on_audio($movie, $info);
-    my $video = work_on_video($movie, $info, $srt, @HB_opts);
+#     my $video = work_on_video($movie, $info, $srt, @HB_opts);
     
 ## merge videos:
 # mencoder -oac copy -ovc copy The\ Twelve\ Chairs\ \(AC3-2ch\)\ \(1of2\).avi The\ Twelve\ Chairs\ \(AC3-2ch\)\ \(2of2\).avi -o The\ Twelve\ Chairs.avi
@@ -422,8 +441,8 @@ sub work_on_file {
 #     my $offset = "00:00:0.400";
 #     my $offset = "00:00:0"; , "-itsoffset", "$offset"
 # return;
-    move ($movie, "$movie.original");
-    $movie = "$movie.original";
+#     move ($movie, "$movie.original");
+#     $movie = "$movie.original";
 #     sleep 25;
 #     die "no audio: $audio\n" if ! -f "$audio";
 #     die "no video: $video\n" if ! -f "$video";
@@ -439,9 +458,9 @@ sub work_on_file {
 #     my $final_size = -s "$dir/$name.mp4" || 0;
 #     print color("green"), "\t\t*** Size of files: $audio_size + $video_size = ".($audio_size + $video_size)." final = $final_size.\nProcent:".($final_size*100/($audio_size + $video_size))."\n", color 'reset';
 # exit 1;
-    unlink "$video" || die "delete video: $!\n" if -f "$video";
+#     unlink "$video" || die "delete video: $!\n" if -f "$video";
 #     unlink "$movie";
-    unlink "$srt";
+#     unlink "$srt";
 #     move("$movie","$bkp_path/$name/") || die "mv avi: $!\n";
 #     move("$srt","$bkp_path/$name/") || die "mv srt: $!\n"  if -f "$srt";
 }

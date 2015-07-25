@@ -29,7 +29,7 @@ while IFS= read -r FILE; do
   mv "$FILE" "$filedir/$filename"_orig."$extension"
   mv "$TMP_DIR/$filename.odt" "$filedir"
 # exit 1
-done < <(find "$DIR" -iname \*.epub -maxdepth 1)
+done < <(find "$DIR" -iname \*.epub -o -iname \*.mobi -maxdepth 1)
 
 # ~/programe/calibre/ebook-convert "$DIR/$INDEX_FILE.html" "$DIR/$INDEX_FILE.htmlz" --no-chapters-in-toc --toc-threshold=0 --max-toc-links=0 --htmlz-css-type=tag --htmlz-class-style=inline
 

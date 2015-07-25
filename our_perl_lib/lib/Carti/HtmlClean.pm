@@ -539,6 +539,7 @@ sub doc_tree_clean_span {
 				    || $att =~ m/^\s*(border|padding)/i
 				    || $att =~ m/^\s*font-family:/i
 				    || $att =~ m/^\s*so-language: /i
+				    || $att =~ m/^\s*letter-spacing: /i
 				    || $att =~ m/^\s*text-transform: uppercase$/i
 				    || $att =~ m/^\s*font-size: [0-9]{1,}%\s*$/i;
 die "Attr name for span_style = $att.\n";

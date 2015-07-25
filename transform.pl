@@ -464,7 +464,6 @@ sub libreoffice_html_clean {
 #     if (! (($book->{'result'}->{'html_clean'} eq "failed" && !$retry_on_fail) ||
 # 	  ($book->{'result'}->{'html_clean'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_clean'}")) ) {
     if ($book->{'result'}->{'html_clean'} ne "done" && $retry_on_fail){
-    print "caca\n";
 	$book->{'result'}->{'html_clean'} = "failed";
 	Common::my_print "Doing the html cleanup for $title.\n";
 	my ($html, $images) = HtmlClean::clean_html_from_oo(Common::read_file($html_file_orig), $title, $work_dir);
