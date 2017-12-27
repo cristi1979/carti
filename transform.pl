@@ -6,9 +6,10 @@ $SIG{__WARN__} = sub { die @_ };
 # #     get utf8 codes from http://www.fileformat.info/info/unicode/char/25cb/index.htm
 # perl -e 'print sprintf("\\x{%x}", $_) foreach (unpack("C*", "Ó"));print"\n"'
 
-#ubuntu:libdbi-perl perltidy libhtml-tidy-perl libcss-tiny-perl libhtml-treebuilder-xpath-perl libarchive-zip-perl libxml-simple-perl libdevel-size-perl libdbd-sqlite3-perl imagemagick
+#ubuntu:libdbi-perl perltidy libhtml-tidy-perl libcss-tiny-perl libhtml-treebuilder-xpath-perl libarchive-zip-perl
+# libxml-simple-perl libdevel-size-perl libdbd-sqlite3-perl imagemagick
 #fedora: perl-URI perl-HTML-Tidy perl-CSS-Tiny perl-HTML-Tree perl-Devel-Size perl-DBD-SQLite imagemagick
-
+#fedora: perl-URI perl-HTML-Tidy perl-CSS-Tiny perl-HTML-Tree perl-Devel-Size perl-HTML-TreeBuilder-XPath ImageMagick
 use Cwd 'abs_path';
 use File::Basename;
 $| = 1;
