@@ -515,15 +515,15 @@ sub doc_tree_clean_span {
 		    if ($att =~ m/^\s*background: (#[0-9a-fA-F]{6}|transparent)\s*$/i
 			|| $att =~ m/^\s*(font-(weight|style): (normal|italic))\s*$/i
 			|| $att =~ m/^\s*color: #[a-z0-9]{6}\s*$/i
-			|| $att =~ m/^\s*(width|height): [0-9.]{1,}(px|in)\s*$/i ) {
+			|| $att =~ m/^\s*(width|height): [0-9.]{1,}(px|in|cm)\s*$/i ) {
 			$res .= $att.";";
-			$imgs = $1 if ($att =~ m/^\s*width: ([0-9.]{1,}(px|in))\s*$/i);
+			$imgs = $1 if ($att =~ m/^\s*width: ([0-9.]{1,}(px|in|cm))\s*$/i);
 		    } elsif ($att =~ m/^\s*background: #[0-9a-fA-F]{6} url(.*)\((.*)\)(.*)/i) {
 # die "Attr name for background span_style = $att.\n";
 			my $img = $2;
 			my $p = HTML::Element->new('p');
 			my $imge = HTML::Element->new('img');
-			$imgs = $1*100 if ($imgs ne "" && $imgs =~ m/\s*(.*)in\s*$/);
+			$imgs = $1*100 if ($imgs ne "" && $imgs =~ m/\s*(.*)(in|cm)\s*$/);
 # 			$imgs = 500 if $imgs>500;
 			$imge->attr("width", "$imgs") if $imgs ne "";
 			$imge->attr("src", "$img");
@@ -534,8 +534,8 @@ sub doc_tree_clean_span {
 				    || $att =~ m/^\s*text-decoration:/i
 				    || $att =~ m/^\s*font-variant: (small-caps|normal)\s*$/i
 				    || $att =~ m/^\s*position: absolute\s*$/i
-				    || $att =~ m/^\s*(top|left|right): -?[0-9]{1,}(\.[0-9]{1,})?in\s*$/i
-				    || $att =~ m/^\s*margin-(right): -?[0-9]{1,}(\.[0-9]{1,})?in\s*$/i
+				    || $att =~ m/^\s*(top|left|right): -?[0-9]{1,}(\.[0-9]{1,})?(in|cm)\s*$/i
+				    || $att =~ m/^\s*margin-(right): -?[0-9]{1,}(\.[0-9]{1,})?(in|cm)\s*$/i
 				    || $att =~ m/^\s*(border|padding)/i
 				    || $att =~ m/^\s*font-family:/i
 				    || $att =~ m/^\s*so-language: /i
@@ -632,20 +632,22 @@ sub doc_tree_fix_paragraph {
 		my @attr_values = split ';', $attr_value;
 		my $new_attr_value = "";
 		foreach my $attr_val (@attr_values) {
-		    if ($attr_val =~ m/^\s*margin-(top|bottom|left|right): -?([0-9]+\.)?[0-9]+in\s*$/i
-			  || $attr_val =~ m/^\s*(text-indent|padding): -?([0-9]+\.)?[0-9]+in\s*$/i
+		    if ($attr_val =~ m/^\s*margin-(top|bottom|left|right): -?([0-9]+\.)?[0-9]+(in|cm)\s*$/i
+			  || $attr_val =~ m/^\s*(text-indent|padding): -?([0-9]+\.)?[0-9]+(in|cm)\s*$/i
 			  || $attr_val =~ m/^\s*line-height: [0-9]+%\s*$/i
 			  || $attr_val =~ m/^\s*(widows|orphans): [0-9]+\s*$/i
 			  || $attr_val =~ m/^\s*border-(top|bottom|left|right): .+\s*$/i
 			  || $attr_val =~ m/^\s*border: (([0-9]+\.)?[0-9]+pt\s*) double #[0-9a-f]{6}\s*$/i
-			  || $attr_val =~ m/^\s*text-decoration: none\s*$/i
 			  || $attr_val =~ m/^\s*border: (none|-?([0-9]+\.)?[0-9]+px solid #[0-9a-f]{6})\s*$/i
 			  || $attr_val =~ m/^\s*page-break-(after|before|inside): (avoid|always|auto)\s*$/i
 			  || $attr_val =~ m/^\s*background: (#[0-9a-f]{6}|transparent)\s*$/i
-			  || $attr_val =~ m/^\s*padding-(top|bottom|left|right): ([0-9]+\.)?[0-9]+in\s*$/i
-			  || $attr_val =~ m/^\s*padding: (([0-9]+\.)?[0-9]+in\s*)+$/i
-			  || $attr_val =~ m/^\s*line-height: ([0-9]+\.)?[0-9]+in\s*$/i
+			  || $attr_val =~ m/^\s*padding-(top|bottom|left|right): ([0-9]+\.)?[0-9]+(in|cm)\s*$/i
+			  || $attr_val =~ m/^\s*padding: (([0-9]+\.)?[0-9]+(in|cm)\s*)+$/i
+			  || $attr_val =~ m/^\s*line-height: ([0-9]+\.)?[0-9]+(in|cm)\s*$/i
 			  || $attr_val =~ m/^\s*text-transform: uppercase$/i
+			  || $attr_val =~ m/^\s*text-decoration: none\s*$/i
+			  || $attr_val =~ m/^\s*letter-spacing: -?(([0-9]+\.)?[0-9]+pt\s*)+$/i
+			  || $attr_val =~ m/^\s*letter-spacing: (normal|small-caps)\s*$/i
 			) {
 		    } elsif ($attr_val =~ m/^\s*font-(weight|style|variant): (normal|small-caps)\s*$/i) {
 			$new_attr_value = "$new_attr_value;$attr_val";

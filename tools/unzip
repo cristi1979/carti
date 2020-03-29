@@ -1,6 +1,8 @@
 #!/bin/bash
 BAD_PRE="/home/cristi/BAD/"
 
+#ubuntu: sudo apt install unrar unace-nonfree convmv
+
 function unarch {
   DIR=$(dirname "$1")
   DIR=$(readlink -f "$DIR")
@@ -22,9 +24,9 @@ function search {
 
 CRT_DIR=$(pwd)
 CRT_DIR=$(readlink -f "$CRT_DIR")
-convmv -f cp1250 -t utf8 --nfc -r --notest "$@"
+convmv -f cp1250 -t utf8 --nfc -r --notest "$@" &> /dev/null 
 TYPE="zip"
-UNARCH="unzip -o "
+UNARCH="unzip -o -P ebook "
 search "$@"
 TYPE="rar"
 UNARCH="unrar x -o+ "
@@ -33,6 +35,6 @@ TYPE="ace"
 UNARCH="unace x "
 search "$@"
 TYPE="7z"
-UNARCH="7z x "
+UNARCH="7z x -pebook "
 search "$@"
 find "$@" -depth -type d -empty -exec rmdir {} \;

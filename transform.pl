@@ -6,7 +6,7 @@ $SIG{__WARN__} = sub { die @_ };
 # #     get utf8 codes from http://www.fileformat.info/info/unicode/char/25cb/index.htm
 # perl -e 'print sprintf("\\x{%x}", $_) foreach (unpack("C*", "Ó"));print"\n"'
 
-#ubuntu:libdbi-perl perltidy libhtml-tidy-perl libcss-tiny-perl libhtml-treebuilder-xpath-perl libarchive-zip-perl libxml-simple-perl libdevel-size-perl libdbd-sqlite3-perl imagemagick
+#ubuntu:libdbi-perl perltidy libhtml-tidy-perl libcss-tiny-perl libhtml-treebuilder-xpath-perl libarchive-zip-perl libxml-simple-perl libdevel-size-perl libdbd-sqlite3-perl imagemagick gawk default-jre libreoffice-java-common
 #fedora: perl-URI perl-HTML-Tidy perl-CSS-Tiny perl-HTML-Tree perl-Devel-Size perl-DBD-SQLite imagemagick
 
 use Cwd 'abs_path';
@@ -181,6 +181,7 @@ sub doc_to_html_macro {
     Common::my_print "Start generating html file.\n";
     my $status;
 #     soffice -env:UserInstallation=file:///tmp/foobar
+    printf "Killing me softly\n";
     `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
 #     if (! -f $libreoo_config || -s $libreoo_config < 500) {
 #     }
@@ -440,6 +441,7 @@ die "SPARTAAAA!!!!\n" if ! -f $zip_file;
 	$book->{'result'}->{'libreoffice'} = "done";
     }
     };
+    print "XXXX LO_0 ERROR\n".Dumper($title, $@). "error: $?.\n" if ($@);
     Common::hash_to_xmlfile($book, "$xml_book");
     print "XXXX LO ERROR\n".Dumper($title, $@). "error: $?.\n" if ($@);
     return ($@)?1:0;
@@ -551,22 +553,22 @@ sub html_to_epub {
     my ($out_file, $output, $type);
 
     ### normal epub
-#     make_ebook($book, "epub_normal", $epub_command,  "$epub_parameters --no-default-epub-cover");
-#     Common::hash_to_xmlfile($book, $xml_book);
+    make_ebook($book, "epub_normal", $epub_command,  "$epub_parameters --no-default-epub-cover");
+    Common::hash_to_xmlfile($book, $xml_book);
 
     ### epub with external font
-#     make_ebook($book, "epub_font_external", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"");
-#     Common::hash_to_xmlfile($book, $xml_book);
+    #make_ebook($book, "epub_font_external", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/external_font.css\"");
+    #Common::hash_to_xmlfile($book, $xml_book);
 
     ### epub with embedded font
-    make_ebook($book, "epub_font_included", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"");
-    if (-f "$work_prefix/$book->{'out'}->{'epub_font_included'}") {
-	Common::add_file_to_zip("$work_prefix/$book->{'out'}->{'epub_font_included'}", "$extra_tools_dir/$font");
-    } else {
-	die "epub not created\n";
-    }
-#     `zip "$work_prefix/$book->{'out'}->{'epub_font_included'}" "$extra_tools_dir/$font"`;
-    Common::hash_to_xmlfile($book, $xml_book);
+#     make_ebook($book, "epub_font_included", $epub_command,  "$epub_parameters --no-default-epub-cover --extra-css=\"$script_dir/tools/internal_font.css\"");
+#    if (-f "$work_prefix/$book->{'out'}->{'epub_font_included'}") {
+#	Common::add_file_to_zip("$work_prefix/$book->{'out'}->{'epub_font_included'}", "$extra_tools_dir/$font");
+#    } else {
+#	die "epub not created\n";
+#    }
+####     `zip "$work_prefix/$book->{'out'}->{'epub_font_included'}" "$extra_tools_dir/$font"`;
+#    Common::hash_to_xmlfile($book, $xml_book);
 
     ### normal mobi
 #     make_ebook($book, "mobi", $epub_command,  "$epub_parameters");
@@ -817,12 +819,12 @@ sub main_process_worker {
     $dbh->do("CREATE TABLE $table_info_name ($table_info_def);");
     do { eval{$dbh->selectall_arrayref( "SELECT * FROM work")}} until (! $@);
 # LIBREOFFICE CLEAN EBOOK LIBREOFFICE_RUNNING CLEAN_RUNNING EBOOK_RUNNING LIBREOFFICE_DONE CLEAN_DONE EBOOK_DONE SINGLE_MODE
-    $dbh->do( "INSERT INTO $table_info_name VALUES (1, 10, 10, 0, 0, 0, 0, 0, 0, 0, NULL)");
+    $dbh->do( "INSERT INTO $table_info_name VALUES (1, 20, 20, 0, 0, 0, 0, 0, 0, 0, NULL)");
 
     Common::my_print "Doing initial config for libreoffice.\n";
     if (-d $libreoo_home){remove_tree("$libreoo_home") || die "Can't remove dir $libreoo_home: $!.\n"};
     system("$libreoo_path", "--headless", "--invisible", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "creating initial libreoffice failed ($?): $!.\n";
-    copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", $libreoo_config) or die "Copy failed libreoffice macros: $!\n";
+    copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", $libreoo_config) or die "Copy failed libreoffice macros ($extra_tools_dir/libreoffice/Standard/Module1.xba): $!\n";
 
     my ($forks, $pid);
     $pid = fork();
