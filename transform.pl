@@ -41,17 +41,13 @@ use Carti::Common;
 my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
 my $extra_tools_dir = "$script_dir/tools";
 
-# my $libreoo_path = "/opt/libreoffice4.0/program/soffice";
-# my $libreoo_path = "/opt/lodev4.0/program/soffice";
 my $libreoo_path = "/usr/bin/soffice";
 my $libreoo_home = $ENV{'HOME'}."/.config/libreoffice/";
 my $libreoo_config = $ENV{'HOME'}."/.config/libreoffice/4/user/basic/Standard/";
-# my $libreoo_home = $ENV{'HOME'}."/.libreoffice/";
 
 my $workign_mode = shift;
 my $docs_prefix = shift;
 if (! defined $workign_mode || ! defined $docs_prefix) {print "Something like transform.pl -clean|-epub /some/dir/\n";die}
-# my $docs_prefix = "/media/carti/aaa_aaa/";
 $docs_prefix = abs_path($docs_prefix);
 
 my $good_files_dir = "$docs_prefix/aaa_aaa/";
@@ -63,7 +59,6 @@ my $duplicate_file = "$script_dir/duplicate_files";
 my $control_file = "doc_info_file.xml";
 # my $work_prefix = "/media/carti/work";
 my $work_prefix = "/home/cristi/Downloads/work";
-# my $work_prefix = "./work";
 $work_prefix = abs_path($work_prefix);
 Common::makedir($work_prefix);
 die "can't find work dir\n" if ! defined $work_prefix || ! -d $work_prefix;
@@ -496,7 +491,8 @@ sub libreoffice_html_to_epub {
     eval{
 #     if (! (($book->{'result'}->{'ebook'} eq "failed" && !$retry_on_fail) ||
 # 	  ($book->{'result'}->{'ebook'} eq "done" && -s "$work_prefix/$book->{'out'}->{'epub_font_external'}")) ) {
-    if ($book->{'result'}->{'ebook'} ne "done" || ! -s "$work_prefix/$book->{'out'}->{'epub_font_external'}" && $retry_on_fail) {
+    if ($book->{'result'}->{'epub_normal'} ne "done" && # we already have epub
+		($book->{'result'}->{'ebook'} ne "done" || ! -s "$work_prefix/$book->{'out'}->{'epub_font_included'}" && $retry_on_fail)) {
 	$book->{'result'}->{'ebook'} = "failed";
 	Common::my_print "Doing epubs for $title.\n";
 	opendir(DIR, "$work_dir");
@@ -887,3 +883,4 @@ if ($workign_mode eq "-ri") {
 # http://user.services.openoffice.org/en/forum/viewtopic.php?f=20&t=23909
 #######   html to doc
 # libreoffice -infilter="HTML (StarWriter)" -convert-to "ODF Text Document" ./q/Poul\ Anderson/index.html
+
