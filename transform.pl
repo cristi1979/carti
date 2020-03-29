@@ -24,9 +24,11 @@ BEGIN {
 # $os = "windows" if $^O eq "MSWin32";
 use File::Find;
 use File::Copy;
+use File::Path qw(make_path remove_tree);
+use File::Temp qw/ tempfile tempdir /;
 use lib (fileparse(abs_path($0), qr/\.[^.]*/))[1]."our_perl_lib/lib";
 
-use File::Path qw(make_path remove_tree);
+use Cwd qw(getcwd);
 use Data::Dumper;
 $Data::Dumper::Sortkeys = 1;
 use URI::Escape;
@@ -40,11 +42,9 @@ use Carti::Common;
 
 my $script_dir = (fileparse(abs_path($0), qr/\.[^.]*/))[1]."";
 my $extra_tools_dir = "$script_dir/tools";
+my $empty_file = "$extra_tools_dir/empty.odt";
 
 my $libreoo_path = "/usr/bin/soffice";
-my $libreoo_home = $ENV{'HOME'}."/.config/libreoffice/";
-my $libreoo_config = $ENV{'HOME'}."/.config/libreoffice/4/user/basic/Standard/";
-
 my $workign_mode = shift;
 my $docs_prefix = shift;
 if (! defined $workign_mode || ! defined $docs_prefix) {print "Something like transform.pl -clean|-epub /some/dir/\n";die}
@@ -176,22 +176,35 @@ sub doc_to_html_macro {
     Common::my_print "Start generating html file.\n";
     my $status;
 #     soffice -env:UserInstallation=file:///tmp/foobar
-    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
+#    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
 #     if (! -f $libreoo_config || -s $libreoo_config < 500) {
 #     }
+
+    my $crt_dir = getcwd();
+    my $tmp_dir = tempdir("carti_tmpfileXXXXXX", DIR => '/tmp', UNLINK => 0);
+    Common::my_print "Doing initial config for libreoffice.\n";    chdir "/home";
+    chdir "$tmp_dir";
+    #if (-d $libreoo_home){remove_tree("$libreoo_home") || die "Can't remove dir $libreoo_home: $!.\n"};
+    #my $libreoo_home = $ENV{'HOME'}."/.config/libreoffice/";
+    #my $libreoo_config = $ENV{'HOME'}."/.config/libreoffice/4/user/basic/Standard/";
+    my $libreoo_config = "$tmp_dir/user/basic/Standard/";
+    system("$libreoo_path", "--headless", "--invisible", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore","-env:UserInstallation=file://$tmp_dir", "--convert-to", "txt", "$empty_file") == 0 or die "creating initial libreoffice failed ($?): $!.\n";
+    copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", $libreoo_config) or die "Copy failed libreoffice macros: $!\n";
+
     eval {
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 600;
 # 	system("Xvfb $Xdisplay -screen 0 1024x768x16 &");
 # 	system("$libreoo_path", "--display", "$Xdisplay", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
 	Common::my_print "Launching libreoffice for $name.\n";
-	system("$libreoo_path", "--headless", "--invisible", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
+	system("$libreoo_path", "--headless", "--invisible", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "-env:UserInstallation=file://$tmp_dir", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
 	alarm 0;
     };
     $status = $?;
+    chdir "$crt_dir";
     if ($status) {
 	printf "Error: Timed out: $status. Child exited with value %d\n", $status >> 8;
-        `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
+        `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep "$tmp_dir" | grep -v grep | gawk '{print \$2}') &>/dev/null`;
     } else {
 	Common::my_print "Finished with status: $status.\n";
     }
@@ -813,12 +826,7 @@ sub main_process_worker {
     $dbh->do("CREATE TABLE $table_info_name ($table_info_def);");
     do { eval{$dbh->selectall_arrayref( "SELECT * FROM work")}} until (! $@);
 # LIBREOFFICE CLEAN EBOOK LIBREOFFICE_RUNNING CLEAN_RUNNING EBOOK_RUNNING LIBREOFFICE_DONE CLEAN_DONE EBOOK_DONE SINGLE_MODE
-    $dbh->do( "INSERT INTO $table_info_name VALUES (1, 10, 10, 0, 0, 0, 0, 0, 0, 0, NULL)");
-
-    Common::my_print "Doing initial config for libreoffice.\n";
-    if (-d $libreoo_home){remove_tree("$libreoo_home") || die "Can't remove dir $libreoo_home: $!.\n"};
-    system("$libreoo_path", "--headless", "--invisible", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "--convert-to", "swriter", "/dev/null") == 0 or die "creating initial libreoffice failed ($?): $!.\n";
-    copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", $libreoo_config) or die "Copy failed libreoffice macros: $!\n";
+    $dbh->do( "INSERT INTO $table_info_name VALUES (10, 20, 20, 0, 0, 0, 0, 0, 0, 0, NULL)");
 
     my ($forks, $pid);
     $pid = fork();

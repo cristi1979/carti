@@ -804,6 +804,7 @@ sub html_tidy {
 		    && $_->{'_text'} !~ m/^missing <li>$/
 		    && $_->{'_text'} !~ m/^missing optional end tag <\/li>$/
 		    && $_->{'_text'} !~ m/^<div> proprietary attribute "type"$/
+		    && $_->{'_text'} !~ m/^<img> lacks "src" attribute$/
 # 		    $_->{'_text'} !~ m/^<a> anchor "_[a-b]i[0-9]+" already defined$/i &&
 # 		    ;
     }
