@@ -57,13 +57,13 @@ sub doc_tree_clean_tables_attributes {
     ### clean table attributes
     foreach my $attr_name ($a_tag->all_external_attr_names){
 	my $attr_value = $a_tag->attr($attr_name);
-	if ( $attr_name eq "border"
+	if (       $attr_name eq "border"
 		|| $attr_name eq "bordercolor"
 		|| $attr_name eq "cellspacing"
 		|| $attr_name eq "frame"
 		|| $attr_name eq "rules"
 		|| $attr_name eq "dir"
-# 		|| $attr_name eq "bgcolor"
+ 		|| $attr_name eq "bgcolor"
 		|| $attr_name eq "align"
 		|| $attr_name eq "style"
 		|| $attr_name eq "cols"
@@ -144,7 +144,9 @@ sub doc_tree_clean_tables {
 				|| $attr_name eq "sdval"
 				|| $attr_name eq "valign"){
 			    $c_tag->attr("$attr_name", undef);
-			} elsif ($attr_name eq "bgcolor" || $attr_name eq "colspan" || $attr_name eq "rowspan"
+			} elsif (  $attr_name eq "bgcolor"
+                                || $attr_name eq "colspan"
+                                || $attr_name eq "rowspan"
 				|| $attr_name eq "width"
 				|| $attr_name eq "height") {
 			} else {
@@ -239,7 +241,7 @@ sub doc_find_unknown_elements {
     Common::my_print "\t".(++$counter)." Find unknown elements.\n";
     foreach my $a_tag ($tree->descendants()) {
 	die "Unknown tag: ".$a_tag->tag."\n" if $a_tag->tag !~ m/^h[0-9]{1,2}$/ &&
-	      $a_tag->tag !~ m/^(head|meta|font|p|div|br|a|dd|dl|dt|table|td|tr|title|i|img|span|sup|body|style|b|u|ul|ol|li|center|hr|blockquote|strike)$/;
+	      $a_tag->tag !~ m/^(head|meta|font|p|div|br|a|dd|dl|dt|table|tt|td|tr|title|i|img|span|sup|body|style|b|u|ul|ol|li|center|hr|blockquote|strike|spacer|address|select|textarea|form|input|noscript|script|blink)$/;
     }
     return $tree;
 }
@@ -532,16 +534,17 @@ sub doc_tree_clean_span {
 		    } else {
 			next if $att =~ m/^\s*float: (top|left|right)\s*$/i
 				    || $att =~ m/^\s*text-decoration:/i
-				    || $att =~ m/^\s*font-variant: (small-caps|normal)\s*$/i
 				    || $att =~ m/^\s*position: absolute\s*$/i
 				    || $att =~ m/^\s*(top|left|right): -?[0-9]{1,}(\.[0-9]{1,})?(in|cm)\s*$/i
 				    || $att =~ m/^\s*margin-(right): -?[0-9]{1,}(\.[0-9]{1,})?(in|cm)\s*$/i
 				    || $att =~ m/^\s*(border|padding)/i
-				    || $att =~ m/^\s*font-family:/i
 				    || $att =~ m/^\s*so-language: /i
 				    || $att =~ m/^\s*letter-spacing: /i
+				    || $att =~ m/^\s*display: (none|inline-block)$/i
 				    || $att =~ m/^\s*text-transform: uppercase$/i
-				    || $att =~ m/^\s*font-size: [0-9]{1,}%\s*$/i;
+				    || $att =~ m/^\s*font-size: [0-9]{1,}%\s*$/i
+				    || $att =~ m/^\s*font-(variant|weight): (small-caps|normal|bold)\s*$/i
+				    || $att =~ m/^\s*font-family:/i;
 die "Attr name for span_style = $att.\n";
 			$res .= $att.";";
 		    }
@@ -595,7 +598,8 @@ sub doc_tree_clean_div {
 		    || $attr_name eq "dir"
 		    || $attr_name eq "lang"
 		    || $attr_name eq "title"
-		    || $attr_name eq "align") {
+		    || $attr_name eq "align"
+                    || $attr_name eq "gutter") {
 		$a_tag->attr("$attr_name", undef);
 	    } elsif ($attr_name eq "style" ) {
 	    } elsif ($attr_name eq "id" ) {
@@ -648,6 +652,7 @@ sub doc_tree_fix_paragraph {
 			  || $attr_val =~ m/^\s*text-decoration: none\s*$/i
 			  || $attr_val =~ m/^\s*letter-spacing: -?(([0-9]+\.)?[0-9]+pt\s*)+$/i
 			  || $attr_val =~ m/^\s*letter-spacing: (normal|small-caps)\s*$/i
+			  || $attr_val =~ m/^\s*display: none\s*$/i
 			) {
 		    } elsif ($attr_val =~ m/^\s*font-(weight|style|variant): (normal|small-caps)\s*$/i) {
 			$new_attr_value = "$new_attr_value;$attr_val";
@@ -676,8 +681,8 @@ sub doc_tree_fix_center {
 	foreach my $b_tag ($a_tag->descendants) {
 	    next if $b_tag->tag ne "center";
 	    $b_tag->tag('p');
-Common::write_file("./q.html", $tree->as_HTML('<>&', "\t"));
-die "what the fuck is this?\n";
+            Common::write_file("./q.html", $tree->as_HTML('<>&', "\t"));
+            die "what the fuck is this?\n";
 	}
     }
     return $tree;
@@ -757,7 +762,7 @@ sub clean_html_from_oo {
 # $html = $tree->as_HTML('<>&', "\t");Common::write_file("./html1.html", $html);
     $txt2 = $tree->as_trimmed_text;
     $tree = doc_tree_fix_paragraphs_start($tree);
-    $tree = doc_find_unknown_elements($tree);
+#    $tree = doc_find_unknown_elements($tree);
     };
     my $msg = $@;
 
@@ -786,25 +791,33 @@ sub html_tidy {
     undef($tidy);
     foreach (@msgs) {
 	die $_ if $_->{'_text'} !~ m/^<style> inserting "type" attribute$/
-		    && $_->{'_text'} !~ m/^trimming empty <(i|u|b|p|sup)>$/
+		    && $_->{'_text'} !~ m/^trimming empty <(i|u|ul|b|p|sup|span|tt|strike|li|blockquote|noscript)>$/
 		    && $_->{'_text'} !~ m/^nested emphasis <i>$/
 		    && $_->{'_text'} !~ m/^<a> converting backslash in URI to slash$/
 		    && $_->{'_text'} !~ m/^<table> lacks "summary" attribute$/
-		    && $_->{'_text'} !~ m/^<img> lacks "alt" attribute$/
-		    && $_->{'_text'} !~ m/^Document content looks like HTML 4.01 Strict$/
-		    && $_->{'_text'} !~ m/^Document content looks like HTML 4.01 Transitional$/
 		    && $_->{'_text'} !~ m/^<h[0-9]+> attribute "lang" lacks value$/
-		    && $_->{'_text'} !~ m#^Doctype given is "-//W3C//DTD HTML 4.0 Transitional//EN"$#
+		    && $_->{'_text'} !~ m/^Document content looks like HTML 4.01 (Strict|Transitional)$/
 		    && $_->{'_text'} !~ m/^Document content looks like HTML Proprietary$/
+		    && $_->{'_text'} !~ m#^Doctype given is "-//W3C//DTD HTML 4.0 Transitional//EN"$#
 		    && $_->{'_text'} !~ m/^<a> cannot copy name attribute to id$/
-		    && $_->{'_text'} !~ m/^<img> anchor "[a-z0-9_ ]+" already defined$/i
+		    && $_->{'_text'} !~ m/^<(img|span)> anchor "[a-z0-9_ \[\]\.]+" already defined$/i
 		    && $_->{'_text'} !~ m/^<img> cannot copy name attribute to id$/
-		    && $_->{'_text'} !~ m/^inserting implicit <span>$/
-		    && $_->{'_text'} !~ m/^missing <\/span> before <p>$/
+		    && $_->{'_text'} !~ m/^<img> lacks "(src|alt)" attribute$/
+		    && $_->{'_text'} !~ m/^inserting implicit <(span|b)>$/
+		    && $_->{'_text'} !~ m/^missing <\/(span|h3|b|h2|h1|sup)> before <(p|table|center|ul|ol|li)>$/
 		    && $_->{'_text'} !~ m/^missing <li>$/
 		    && $_->{'_text'} !~ m/^missing optional end tag <\/li>$/
-		    && $_->{'_text'} !~ m/^<div> proprietary attribute "type"$/
-		    && $_->{'_text'} !~ m/^<img> lacks "src" attribute$/
+		    && $_->{'_text'} !~ m/^<(div|meta|b)> proprietary attribute "[a-z0-9-_ '"]+"$/
+		    && $_->{'_text'} !~ m/^nested emphasis <b>$/
+		    && $_->{'_text'} !~ m/^<meta> attribute with missing trailing quote mark$/
+		    && $_->{'_text'} !~ m/^<meta> attribute "[a-z0-9-_ '",]+" lacks value$/
+		    && $_->{'_text'} !~ m/^<meta> dropping value "NULL" for repeated attribute "mirror"$/
+		    && $_->{'_text'} !~ m/^value for attribute "or" missing quote marks$/
+		    && $_->{'_text'} !~ m/^<(spacer|blink)> is not approved by W3C$/
+		    && $_->{'_text'} !~ m/^discarding unexpected <\/(span|h3|h2|h1|b|sup)>$/
+		    && $_->{'_text'} !~ m/^<input> isn't allowed in <body> elements$/
+		    && $_->{'_text'} !~ m/^<b> is probably intended as <\/b>$/
+		    && $_->{'_text'} !~ m/^<body> previously mentioned$/
 # 		    $_->{'_text'} !~ m/^<a> anchor "_[a-b]i[0-9]+" already defined$/i &&
 # 		    ;
     }

@@ -175,18 +175,10 @@ sub doc_to_html_macro {
     my ($name,$dir,$suffix) = fileparse($doc_file, qr/\.[^.]*/);
     Common::my_print "Start generating html file.\n";
     my $status;
-#     soffice -env:UserInstallation=file:///tmp/foobar
-#    `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep -v grep | gawk '{print \$2}') &>/dev/null`;
-#     if (! -f $libreoo_config || -s $libreoo_config < 500) {
-#     }
-
     my $crt_dir = getcwd();
     my $tmp_dir = tempdir("carti_tmpfileXXXXXX", DIR => '/tmp', UNLINK => 0);
     Common::my_print "Doing initial config for libreoffice.\n";    chdir "/home";
     chdir "$tmp_dir";
-    #if (-d $libreoo_home){remove_tree("$libreoo_home") || die "Can't remove dir $libreoo_home: $!.\n"};
-    #my $libreoo_home = $ENV{'HOME'}."/.config/libreoffice/";
-    #my $libreoo_config = $ENV{'HOME'}."/.config/libreoffice/4/user/basic/Standard/";
     my $libreoo_config = "$tmp_dir/user/basic/Standard/";
     system("$libreoo_path", "--headless", "--invisible", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore","-env:UserInstallation=file://$tmp_dir", "--convert-to", "txt", "$empty_file") == 0 or die "creating initial libreoffice failed ($?): $!.\n";
     copy("$extra_tools_dir/libreoffice/Standard/Module1.xba", $libreoo_config) or die "Copy failed libreoffice macros: $!\n";
@@ -194,14 +186,13 @@ sub doc_to_html_macro {
     eval {
 	local $SIG{ALRM} = sub { die "alarm\n" };
 	alarm 600;
-# 	system("Xvfb $Xdisplay -screen 0 1024x768x16 &");
-# 	system("$libreoo_path", "--display", "$Xdisplay", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
 	Common::my_print "Launching libreoffice for $name.\n";
 	system("$libreoo_path", "--headless", "--invisible", "--nodefault", "--nologo", "--nofirststartwizard", "--norestore", "-env:UserInstallation=file://$tmp_dir", "macro:///Standard.Module1.ReplaceNBHyphenHTML($doc_file)") == 0 or die "libreoffice failed: $?";
 	alarm 0;
     };
     $status = $?;
     chdir "$crt_dir";
+    remove_tree("$tmp_dir") || print("Can't remove dir $tmp_dir: $!.\n");
     if ($status) {
 	printf "Error: Timed out: $status. Child exited with value %d\n", $status >> 8;
         `kill -9 \$(ps -ef | egrep soffice.bin\\|oosplash.bin | grep "$tmp_dir" | grep -v grep | gawk '{print \$2}') &>/dev/null`;
@@ -253,13 +244,6 @@ sub get_documents {
     our $count = 0;
     sub add_document {
 	my $file = shift;
-
-# if ($file !~ m/^([&a-z\.\/_ \-0-9\(\)\[\],:'!"\?@;]|\x{c4}\x{83}|\x{c5}\x{9e}|\x{c5}\x{9f}|\x{c3}\x{a2}|\x{c3}\x{a8}|\x{c3}\x{a9}|\x{c3}\x{a4}|\x{c8}\x{9b}|\x{c8}\x{99}|\x{c5}\x{a2}|\x{c3}\x{8e}|\x{c3}\x{a5}|\x{c3}\x{85}|\x{c3}\x{bc}|\x{e2}\x{82}\x{ac}|\x{e2}\x{80}\x{99}|\x{c3}\x{a1}|\x{c3}\x{ba}|\x{c5}\x{a1}|\x{c5}\x{a0}|\x{c3}\x{a0}|\x{c3}\x{ae}|\x{e2}\x{80}\x{a6})+$/i){
-# print "$file\n";
-# $file=~ s/[&a-z\.\/_ \-0-9\(\)\[\],:'!"\?@;]|\x{c4}\x{83}|\x{c5}\x{9e}|\x{c5}\x{9f}|\x{c3}\x{a2}|\x{c3}\x{a8}|\x{c3}\x{a9}|\x{c3}\x{a4}|\x{c8}\x{9b}|\x{c8}\x{99}|\x{c5}\x{a2}|\x{c3}\x{8e}|\x{c3}\x{a5}|\x{c3}\x{85}|\x{c3}\x{bc}|\x{e2}\x{82}\x{ac}|\x{e2}\x{80}\x{99}|\x{c3}\x{a1}|\x{c3}\x{ba}|\x{c5}\x{a1}|\x{c5}\x{a0}|\x{c3}\x{a0}|\x{c3}\x{ae}|\x{e2}\x{80}\x{a6}//gi;
-# die "\nERROR WWW\n_$file\_\n";
-# };
-
 	print "$count\r" if ++$count % 10 == 0;
 	$file = abs_path($file);
 	my ($name, $dir, $suffix) = fileparse($file, qr/\.[^.]*/);
@@ -364,7 +348,7 @@ sub get_existing_documents {
     closedir(DIR);
     my $count = 0;
     foreach my $dir (sort @alldirs) {
-	if (! -f "$work_prefix/$dir/$control_file"){
+	if (! -f "$work_prefix/$dir/$control_file" || -z "$work_prefix/$dir/$control_file"){
 	    print "Remove wrong dir $work_prefix/$dir.\n";
 	    remove_tree("$work_prefix/$dir") || die "Can't remove dir $work_prefix/$dir: $!.\n";
 	    next;
@@ -428,8 +412,6 @@ sub libreoffice_to_html {
 
     my $working_file = "$work_dir/$book->{'file_info'}->{'doc_filename_fixed'}";
     eval{
-#     if (! (($book->{'result'}->{'libreoffice'} eq "failed" && !$retry_on_fail) ||
-# 	  ($book->{'result'}->{'libreoffice'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_orig'}"))) {
     if ($book->{'result'}->{'libreoffice'} ne "done" && $retry_on_fail) {
 	$book->{'result'}->{'libreoffice'} = "failed";
 	Common::my_print "Doing the doc to html conversion for $title.\n";
@@ -457,9 +439,10 @@ sub libreoffice_html_clean {
     my $xml_book = shift;
     my $book = Common::xmlfile_to_hash($xml_book);
     my ($work_dir, $title, $html_file_orig) =("$work_prefix/$book->{'file_info'}->{'workingdir'}", $book->{'title'}, "$work_prefix/$book->{'out'}->{'html_file_orig'}");
-    my $file_max_size_single_thread = 30000000;
     my $dbh;$dbh = connect_sqlite($dbh, $path_to_db_file);
     my $sth = $dbh->prepare( "select libreoffice_running+clean_running+ebook_running from $table_info_name");
+    # some files are too big and take a lot of memory. Single thread for them
+    my $file_max_size_single_thread = 50000000;
     if (-f $html_file_orig && -s $html_file_orig > $file_max_size_single_thread) {
 	## wait for others to finish:
 	Common::my_print "\t\t************ Single for $title.************\n";
@@ -469,8 +452,6 @@ sub libreoffice_html_clean {
     }
 
     eval{
-#     if (! (($book->{'result'}->{'html_clean'} eq "failed" && !$retry_on_fail) ||
-# 	  ($book->{'result'}->{'html_clean'} eq "done" && -s "$work_prefix/$book->{'out'}->{'html_file_clean'}")) ) {
     if ($book->{'result'}->{'html_clean'} ne "done" && $retry_on_fail){
 	$book->{'result'}->{'html_clean'} = "failed";
 	Common::my_print "Doing the html cleanup for $title.\n";
@@ -500,12 +481,8 @@ sub libreoffice_html_to_epub {
     my $xml_book = shift;
     my $book = Common::xmlfile_to_hash($xml_book);
     my ($work_dir, $title, $html_file_clean) = ("$work_prefix/$book->{'file_info'}->{'workingdir'}", $book->{'title'}, "$work_prefix/$book->{'out'}->{'html_file_clean'}");
-
     eval{
-#     if (! (($book->{'result'}->{'ebook'} eq "failed" && !$retry_on_fail) ||
-# 	  ($book->{'result'}->{'ebook'} eq "done" && -s "$work_prefix/$book->{'out'}->{'epub_font_external'}")) ) {
-    if ($book->{'result'}->{'epub_normal'} ne "done" && # we already have epub
-		($book->{'result'}->{'ebook'} ne "done" || ! -s "$work_prefix/$book->{'out'}->{'epub_font_included'}" && $retry_on_fail)) {
+    if (($book->{'result'}->{'ebook'} ne "done" || ! -s "$work_prefix/$book->{'out'}->{'epub_font_included'}") && $retry_on_fail) {
 	$book->{'result'}->{'ebook'} = "failed";
 	Common::my_print "Doing epubs for $title.\n";
 	opendir(DIR, "$work_dir");
@@ -692,7 +669,7 @@ sub reap_children {
 	    my $new_status = $exit_status?'failed':'done';
 	    update_proc($dbh, "UPDATE $table_work_name set worker_name='$crt_worker', status='done', pid=0 where status='working' and worker_name='$crt_worker' and xml_file=".$dbh->quote($xml_file));
 	}
-	print "\t\t$crt_worker ($pid) $running->{$pid}->{'name'} reapead.\n";
+	#print "\t\t$crt_worker ($pid) $running->{$pid}->{'name'} reapead.\n";
 	delete $running->{$pid};
 	update_proc($dbh, "UPDATE $table_info_name set $crt_worker\_running=".(scalar keys %$running));
 	update_proc($dbh, "UPDATE $table_info_name set single_mode=NULL where single_mode=".$dbh->quote($xml_file."/$crt_worker"), 1);
@@ -782,31 +759,30 @@ sub periodic_checks {
     do {
 	my $string = "";
 	$sth_work->execute();
-	while ($row = $sth_work->fetch){
-	    open( STAT , "</proc/@$row[1]/stat" ) or next;
-	    my @stat = split /\s+/ , <STAT>;
-	    close( STAT );
-# 	    my $name = (split /$url_sep/, ((split /\/+/, @$row[2])[-2]))[-1];
-	    my $name = (split /\/+/, @$row[2])[-2];
-	    $string .= "** worker pid = @$row[1], VmSize = ".(sprintf "%.0f", $stat[22]/1024/1024)."MB, VmRSS =".(sprintf "%.0f", $stat[23] * 4/1024)."MB, daddy = $stat[3], name = @$row[0] $name\n";
-	    $parents->{$stat[3]} = @$row[0];
-	}
-	my @all_procs = grep /PPid:\s+$main_proc/, `grep PPid /proc/*/status`;
-	foreach my $pid (@all_procs, $main_proc){
-	    $pid =~ s/(\/status:PPid:.+\n$)|(^\/proc\/)//g;
-	    open( STAT , "</proc/$pid/stat" ) or next;
-	    my @stat = split /\s+/ , <STAT>;
-	    close( STAT );
-	    my $name_real = "";
-	    $name_real = $parents->{$pid} if defined $parents->{$pid};
-	    $name_real = "checker" if $pid == $$;
-	    $string .= "** forked pid = $pid, VmSize = ".(sprintf "%.0f", $stat[22]/1024/1024)."MB, VmRSS =".(sprintf "%.0f", $stat[23] * 4/1024)."MB, daddy = $stat[3], name = $name_real$stat[1]\n";
-	}
+	#while ($row = $sth_work->fetch){
+	    #open( STAT , "</proc/@$row[1]/stat" ) or next;
+	    #my @stat = split /\s+/ , <STAT>;
+	    #close( STAT );
+	    #my $name = (split /\/+/, @$row[2])[-2];
+	    #$string .= "** worker pid = @$row[1], VmSize = ".(sprintf "%.0f", $stat[22]/1024/1024)."MB, VmRSS =".(sprintf "%.0f", $stat[23] * 4/1024)."MB, daddy = $stat[3], name = @$row[0] $name\n";
+	    #$parents->{$stat[3]} = @$row[0];
+	#}
+	#my @all_procs = grep /PPid:\s+$main_proc/, `grep PPid /proc/*/status`;
+	#foreach my $pid (@all_procs, $main_proc){
+	    #$pid =~ s/(\/status:PPid:.+\n$)|(^\/proc\/)//g;
+	    #open( STAT , "</proc/$pid/stat" ) or next;
+	    #my @stat = split /\s+/ , <STAT>;
+	    #close( STAT );
+	    #my $name_real = "";
+	    #$name_real = $parents->{$pid} if defined $parents->{$pid};
+	    #$name_real = "checker" if $pid == $$;
+	    #$string .= "** forked pid = $pid, VmSize = ".(sprintf "%.0f", $stat[22]/1024/1024)."MB, VmRSS =".(sprintf "%.0f", $stat[23] * 4/1024)."MB, daddy = $stat[3], name = $name_real$stat[1]\n";
+	#}
 	$sth_info->execute();
 	while ($row = $sth_info->fetch){
 	    $string .= "** LO_procs = @$row[3] (@$row[0]), clean_procs = @$row[4] (@$row[1]), ebook_procs = @$row[5] (@$row[2])\n** single_mode = @$row[6]\n";
 	}
-	sleep 1;
+	sleep 10;
 	$sth->execute();
 	print "**************************************************\n$string**************************************************\n";
     } while (! @{$sth->fetch}[0]);
@@ -838,9 +814,9 @@ sub main_process_worker {
     $pid = fork();
     if (!$pid) {focker_launcher(\&libreoffice_html_to_epub, "ebook"); exit 0;};
     $forks->{$pid} = "epub";
-#     $pid = fork();
-#     if (!$pid) {periodic_checks($main_pid); exit 0;};
-#     $forks->{$pid} = "checks";
+    $pid = fork();
+    #if (!$pid) {periodic_checks($main_pid); exit 0;};
+    $forks->{$pid} = "checks";
     print Dumper($forks);
 
     my $files_to_import = synchronize_files;
@@ -848,6 +824,8 @@ sub main_process_worker {
     foreach my $file (sort keys %$files_to_import) {
 	my $type = $files_to_import->{$file}->{'file_info'}->{'type'};
 	my $xml_file = "$work_prefix/$files_to_import->{$file}->{'file_info'}->{'workingdir'}/$control_file";
+
+#next if $xml_file !~ m/Introducere in metafizica divina/;
 	if ($type =~ m/\.docx?$/i || $type =~ m/\.odt$/i || $type =~ m/\.rtf$/i) {
 	    Common::hash_to_xmlfile($files_to_import->{$file}, $xml_file);
 	    $dbh->do( "INSERT INTO $table_work_name VALUES (".$dbh->quote($xml_file).", 'libreoffice', 'start', 0)");
@@ -866,7 +844,7 @@ sub main_process_worker {
 	if ($pid > 0) {
 	    next, print "strange pid: $pid\n" if ! defined  $forks->{$pid};
 	    delete $forks->{$pid};
-	    print "reaped $pid\n";
+	    #print "reaped $pid\n";
 	}
 	usleep(100000);
     }
